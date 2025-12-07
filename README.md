@@ -168,7 +168,9 @@ If it helps you build something amazing, just tell people where it came from. �
 Contact
 
 📧 Email: dfeen87@gmail.com
+
 💼 LinkedIn: www.linkedin.com/in/don-michael-feeney-jr-908a96351
+
 🌐 Phone Number: 267.348.7177
 
 Want to hire me for consulting or custom development? Get in touch.
