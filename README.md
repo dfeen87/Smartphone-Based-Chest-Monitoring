@@ -1,5 +1,7 @@
 # RespiroSync™
 
+MIT License.
+
 **Cross-Platform Respiratory & Sleep Monitoring Using Smartphone Motion Sensors**
 
 RespiroSync is a portable, on-device engine for estimating respiratory patterns and sleep metrics using only a smartphone's built-in accelerometer and gyroscope. By leveraging chest-mounted motion signals, RespiroSync provides low-cost, hardware-free access to respiratory insights traditionally requiring specialized equipment.
