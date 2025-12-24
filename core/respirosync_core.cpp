@@ -121,6 +121,7 @@ private:
     float current_bpm;
     SleepStage current_stage;
     float movement_variance;
+    float gravity_estimate;
     uint64_t session_start_time;
     uint64_t last_breath_time;
     
@@ -137,7 +138,6 @@ private:
     
     // Helper: Remove gravity from accelerometer (simple high-pass)
     float removeGravity(const SensorSample& accel) {
-        static float gravity_estimate = 9.81f;
         const float alpha = 0.8f; // Smoothing factor
         
         float mag = magnitude(accel);
@@ -283,6 +283,7 @@ public:
         current_bpm(0.0f),
         current_stage(UNKNOWN),
         movement_variance(0.0f),
+        gravity_estimate(9.81f),
         session_start_time(0),
         last_breath_time(0)
     {
@@ -301,6 +302,17 @@ public:
         breathing_filter.reset();
         buffer_index = 0;
         current_stage = UNKNOWN;
+        current_bpm = 0.0f;
+        movement_variance = 0.0f;
+        gravity_estimate = 9.81f;
+        last_peak_time = 0;
+        last_peak_value = 0.0f;
+        last_breath_time = 0;
+        in_peak = false;
+        peak_threshold = 0.1f;
+        for (int i = 0; i < BUFFER_SIZE; i++) {
+            breathing_signal_buffer[i] = 0.0f;
+        }
     }
     
     void feedGyroscope(float x, float y, float z, uint64_t timestamp_ms) {
