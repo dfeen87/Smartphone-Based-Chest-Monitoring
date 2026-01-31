@@ -9,11 +9,14 @@
  * clinical-grade respiratory monitoring.
  */
 
-#include <cmath>
-#include <vector>
-#include <deque>
-#include <cstdint>
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <deque>
+#include <vector>
+
+#include "respirosync_core.h"
 
 namespace RespiroSync {
 
@@ -32,23 +35,8 @@ struct BreathCycle {
     float duration_ms;      // Time since last breath
 };
 
-enum SleepStage {
-    AWAKE,
-    LIGHT_SLEEP,
-    DEEP_SLEEP,
-    REM_SLEEP,
-    UNKNOWN
-};
-
-struct SleepMetrics {
-    SleepStage current_stage;
-    float confidence;               // 0.0-1.0
-    float breathing_rate_bpm;       // Breaths per minute
-    float breathing_regularity;     // 0.0-1.0 (higher = more consistent)
-    float movement_intensity;       // 0.0-1.0 (higher = more restless)
-    int breath_cycles_detected;
-    bool possible_apnea;           // True if >10sec pause detected
-};
+using ::SleepMetrics;
+using ::SleepStage;
 
 // ============================================================================
 // SIGNAL PROCESSING - THE CORE MAGIC
@@ -65,10 +53,6 @@ public:
     ButterworthFilter() : x1(0), x2(0), y1(0), y2(0) {
         // Coefficients for 0.1-0.5 Hz bandpass at ~50Hz sample rate
         // These are pre-calculated for computational efficiency
-        float lowcut = 0.1f;
-        float highcut = 0.5f;
-        float fs = 50.0f;
-        
         // Simplified coefficients (in production, calculate dynamically)
         b0 = 0.0201f;
         b1 = 0.0f;
@@ -104,11 +88,13 @@ private:
     // Sensor buffers
     std::deque<SensorSample> gyro_buffer;
     std::deque<SensorSample> accel_buffer;
-    std::vector<BreathCycle> breath_history;
+    std::deque<BreathCycle> breath_history;
     
     // Signal processing
     ButterworthFilter breathing_filter;
     float breathing_signal_buffer[256];
+    float breathing_signal_sum;
+    float breathing_signal_sum_squares;
     int buffer_index;
     
     // State tracking
@@ -127,7 +113,6 @@ private:
     
     // Configuration
     const int BUFFER_SIZE = 256;
-    const int MIN_SAMPLES_FOR_BPM = 100;
     const float PEAK_THRESHOLD_MULTIPLIER = 0.6f;
     const uint64_t APNEA_THRESHOLD_MS = 10000; // 10 seconds
     
@@ -148,23 +133,16 @@ private:
     
     // Helper: Detect breathing peaks in filtered signal
     void detectBreathingPeaks(float signal, uint64_t timestamp) {
+        float outgoing = breathing_signal_buffer[buffer_index];
         breathing_signal_buffer[buffer_index] = signal;
+        breathing_signal_sum += signal - outgoing;
+        breathing_signal_sum_squares += (signal * signal) - (outgoing * outgoing);
         buffer_index = (buffer_index + 1) % BUFFER_SIZE;
         
         // Dynamic threshold based on recent signal variance
-        float mean = 0.0f;
-        for (int i = 0; i < BUFFER_SIZE; i++) {
-            mean += breathing_signal_buffer[i];
-        }
-        mean /= BUFFER_SIZE;
-        
-        float variance = 0.0f;
-        for (int i = 0; i < BUFFER_SIZE; i++) {
-            float diff = breathing_signal_buffer[i] - mean;
-            variance += diff * diff;
-        }
-        variance /= BUFFER_SIZE;
-        float stddev = std::sqrt(variance);
+        float mean = breathing_signal_sum / BUFFER_SIZE;
+        float variance = (breathing_signal_sum_squares / BUFFER_SIZE) - (mean * mean);
+        float stddev = std::sqrt(std::max(0.0f, variance));
         
         peak_threshold = mean + stddev * PEAK_THRESHOLD_MULTIPLIER;
         
@@ -187,7 +165,7 @@ private:
                     // Keep only last 60 seconds of breaths
                     while (!breath_history.empty() && 
                            timestamp - breath_history.front().timestamp_ms > 60000) {
-                        breath_history.erase(breath_history.begin());
+                        breath_history.pop_front();
                     }
                     
                     last_breath_time = timestamp;
@@ -290,6 +268,8 @@ public:
         for (int i = 0; i < 256; i++) {
             breathing_signal_buffer[i] = 0.0f;
         }
+        breathing_signal_sum = 0.0f;
+        breathing_signal_sum_squares = 0.0f;
     }
     
     // ========================================================================
@@ -313,6 +293,8 @@ public:
         for (int i = 0; i < BUFFER_SIZE; i++) {
             breathing_signal_buffer[i] = 0.0f;
         }
+        breathing_signal_sum = 0.0f;
+        breathing_signal_sum_squares = 0.0f;
     }
     
     void feedGyroscope(float x, float y, float z, uint64_t timestamp_ms) {
@@ -392,14 +374,16 @@ public:
         metrics.confidence = std::min(1.0f, samples_available / 20.0f);
         
         // Check for apnea (no breath detected in >10 seconds)
-        metrics.possible_apnea = (last_breath_time > 0 && 
-                                  timestamp_ms - last_breath_time > APNEA_THRESHOLD_MS);
+        metrics.possible_apnea = (last_breath_time > 0 &&
+                                  timestamp_ms - last_breath_time > APNEA_THRESHOLD_MS)
+                                     ? 1
+                                     : 0;
         
         return metrics;
     }
     
     // Get detailed breath history (for advanced analysis)
-    const std::vector<BreathCycle>& getBreathHistory() const {
+    const std::deque<BreathCycle>& getBreathHistory() const {
         return breath_history;
     }
 };
@@ -413,30 +397,47 @@ public:
 extern "C" {
     using namespace RespiroSync;
     
-    // Opaque handle
-    typedef void* RespiroHandle;
-    
     RespiroHandle respiro_create() {
         return new RespiroEngine();
     }
     
     void respiro_destroy(RespiroHandle handle) {
+        if (!handle) {
+            return;
+        }
         delete static_cast<RespiroEngine*>(handle);
     }
     
     void respiro_start_session(RespiroHandle handle, uint64_t timestamp_ms) {
+        if (!handle) {
+            return;
+        }
         static_cast<RespiroEngine*>(handle)->startSession(timestamp_ms);
     }
     
     void respiro_feed_gyro(RespiroHandle handle, float x, float y, float z, uint64_t timestamp_ms) {
+        if (!handle) {
+            return;
+        }
         static_cast<RespiroEngine*>(handle)->feedGyroscope(x, y, z, timestamp_ms);
     }
     
     void respiro_feed_accel(RespiroHandle handle, float x, float y, float z, uint64_t timestamp_ms) {
+        if (!handle) {
+            return;
+        }
         static_cast<RespiroEngine*>(handle)->feedAccelerometer(x, y, z, timestamp_ms);
     }
     
     void respiro_get_metrics(RespiroHandle handle, uint64_t timestamp_ms, SleepMetrics* out_metrics) {
+        if (!out_metrics) {
+            return;
+        }
+        if (!handle) {
+            std::memset(out_metrics, 0, sizeof(*out_metrics));
+            out_metrics->current_stage = UNKNOWN;
+            return;
+        }
         *out_metrics = static_cast<RespiroEngine*>(handle)->getCurrentMetrics(timestamp_ms);
     }
 }
