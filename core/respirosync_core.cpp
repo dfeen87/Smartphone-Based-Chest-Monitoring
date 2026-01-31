@@ -88,11 +88,13 @@ private:
     // Sensor buffers
     std::deque<SensorSample> gyro_buffer;
     std::deque<SensorSample> accel_buffer;
-    std::vector<BreathCycle> breath_history;
+    std::deque<BreathCycle> breath_history;
     
     // Signal processing
     ButterworthFilter breathing_filter;
     float breathing_signal_buffer[256];
+    float breathing_signal_sum;
+    float breathing_signal_sum_squares;
     int buffer_index;
     
     // State tracking
@@ -131,23 +133,16 @@ private:
     
     // Helper: Detect breathing peaks in filtered signal
     void detectBreathingPeaks(float signal, uint64_t timestamp) {
+        float outgoing = breathing_signal_buffer[buffer_index];
         breathing_signal_buffer[buffer_index] = signal;
+        breathing_signal_sum += signal - outgoing;
+        breathing_signal_sum_squares += (signal * signal) - (outgoing * outgoing);
         buffer_index = (buffer_index + 1) % BUFFER_SIZE;
         
         // Dynamic threshold based on recent signal variance
-        float mean = 0.0f;
-        for (int i = 0; i < BUFFER_SIZE; i++) {
-            mean += breathing_signal_buffer[i];
-        }
-        mean /= BUFFER_SIZE;
-        
-        float variance = 0.0f;
-        for (int i = 0; i < BUFFER_SIZE; i++) {
-            float diff = breathing_signal_buffer[i] - mean;
-            variance += diff * diff;
-        }
-        variance /= BUFFER_SIZE;
-        float stddev = std::sqrt(variance);
+        float mean = breathing_signal_sum / BUFFER_SIZE;
+        float variance = (breathing_signal_sum_squares / BUFFER_SIZE) - (mean * mean);
+        float stddev = std::sqrt(std::max(0.0f, variance));
         
         peak_threshold = mean + stddev * PEAK_THRESHOLD_MULTIPLIER;
         
@@ -170,7 +165,7 @@ private:
                     // Keep only last 60 seconds of breaths
                     while (!breath_history.empty() && 
                            timestamp - breath_history.front().timestamp_ms > 60000) {
-                        breath_history.erase(breath_history.begin());
+                        breath_history.pop_front();
                     }
                     
                     last_breath_time = timestamp;
@@ -273,6 +268,8 @@ public:
         for (int i = 0; i < 256; i++) {
             breathing_signal_buffer[i] = 0.0f;
         }
+        breathing_signal_sum = 0.0f;
+        breathing_signal_sum_squares = 0.0f;
     }
     
     // ========================================================================
@@ -296,6 +293,8 @@ public:
         for (int i = 0; i < BUFFER_SIZE; i++) {
             breathing_signal_buffer[i] = 0.0f;
         }
+        breathing_signal_sum = 0.0f;
+        breathing_signal_sum_squares = 0.0f;
     }
     
     void feedGyroscope(float x, float y, float z, uint64_t timestamp_ms) {
@@ -384,7 +383,7 @@ public:
     }
     
     // Get detailed breath history (for advanced analysis)
-    const std::vector<BreathCycle>& getBreathHistory() const {
+    const std::deque<BreathCycle>& getBreathHistory() const {
         return breath_history;
     }
 };
