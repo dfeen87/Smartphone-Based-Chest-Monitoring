@@ -89,6 +89,7 @@ private:
     std::deque<SensorSample> gyro_buffer;
     std::deque<SensorSample> accel_buffer;
     std::deque<BreathCycle> breath_history;
+    std::deque<float> accel_magnitude_buffer;
     
     // Signal processing
     ButterworthFilter breathing_filter;
@@ -110,6 +111,8 @@ private:
     float gravity_estimate;
     uint64_t session_start_time;
     uint64_t last_breath_time;
+    float accel_magnitude_sum;
+    float accel_magnitude_sum_squares;
     
     // Configuration
     const int BUFFER_SIZE = 256;
@@ -122,13 +125,12 @@ private:
     }
     
     // Helper: Remove gravity from accelerometer (simple high-pass)
-    float removeGravity(const SensorSample& accel) {
+    float removeGravity(float magnitude) {
         const float alpha = 0.8f; // Smoothing factor
         
-        float mag = magnitude(accel);
-        gravity_estimate = alpha * gravity_estimate + (1 - alpha) * mag;
+        gravity_estimate = alpha * gravity_estimate + (1 - alpha) * magnitude;
         
-        return mag - gravity_estimate;
+        return magnitude - gravity_estimate;
     }
     
     // Helper: Detect breathing peaks in filtered signal
@@ -263,7 +265,9 @@ public:
         movement_variance(0.0f),
         gravity_estimate(9.81f),
         session_start_time(0),
-        last_breath_time(0)
+        last_breath_time(0),
+        accel_magnitude_sum(0.0f),
+        accel_magnitude_sum_squares(0.0f)
     {
         for (int i = 0; i < 256; i++) {
             breathing_signal_buffer[i] = 0.0f;
@@ -290,6 +294,9 @@ public:
         last_breath_time = 0;
         in_peak = false;
         peak_threshold = 0.1f;
+        accel_magnitude_sum = 0.0f;
+        accel_magnitude_sum_squares = 0.0f;
+        accel_magnitude_buffer.clear();
         for (int i = 0; i < BUFFER_SIZE; i++) {
             breathing_signal_buffer[i] = 0.0f;
         }
@@ -311,16 +318,24 @@ public:
     void feedAccelerometer(float x, float y, float z, uint64_t timestamp_ms) {
         SensorSample sample = {x, y, z, timestamp_ms};
         accel_buffer.push_back(sample);
+        float accel_magnitude = magnitude(sample);
+        accel_magnitude_buffer.push_back(accel_magnitude);
+        accel_magnitude_sum += accel_magnitude;
+        accel_magnitude_sum_squares += accel_magnitude * accel_magnitude;
         
         // Keep only last 5 seconds
         while (!accel_buffer.empty() && 
                timestamp_ms - accel_buffer.front().timestamp_ms > 5000) {
+            float outgoing_magnitude = accel_magnitude_buffer.front();
+            accel_magnitude_sum -= outgoing_magnitude;
+            accel_magnitude_sum_squares -= outgoing_magnitude * outgoing_magnitude;
+            accel_magnitude_buffer.pop_front();
             accel_buffer.pop_front();
         }
         
         // CORE PROCESSING PIPELINE
         // 1. Remove gravity from accelerometer
-        float chest_motion = removeGravity(sample);
+        float chest_motion = removeGravity(accel_magnitude);
         
         // 2. Add gyroscope contribution (angular velocity indicates rotation)
         if (!gyro_buffer.empty()) {
@@ -338,18 +353,11 @@ public:
         
         // Calculate movement intensity (for sleep staging)
         movement_variance = 0.0f;
-        if (accel_buffer.size() > 10) {
-            float mean_mag = 0.0f;
-            for (const auto& s : accel_buffer) {
-                mean_mag += magnitude(s);
-            }
-            mean_mag /= accel_buffer.size();
-            
-            for (const auto& s : accel_buffer) {
-                float diff = magnitude(s) - mean_mag;
-                movement_variance += diff * diff;
-            }
-            movement_variance /= accel_buffer.size();
+        if (accel_magnitude_buffer.size() > 10) {
+            float mean_mag = accel_magnitude_sum / accel_magnitude_buffer.size();
+            float variance = (accel_magnitude_sum_squares / accel_magnitude_buffer.size()) -
+                             (mean_mag * mean_mag);
+            movement_variance = std::max(0.0f, variance);
         }
     }
     
