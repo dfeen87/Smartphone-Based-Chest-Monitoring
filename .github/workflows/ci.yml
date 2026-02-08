@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  core-build:
+    name: Build core library
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compile RespiroSync core
+        run: |
+          g++ -c core/respirosync_core.cpp \
+            -std=c++17 \
+            -O2 \
+            -o /tmp/respirosync_core.o
