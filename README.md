@@ -1,4 +1,4 @@
-# RespiroSync™
+# RespiroSync Chest Based Respiratory Monitoring System
 
 MIT License.
 
