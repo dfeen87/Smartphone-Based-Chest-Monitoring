@@ -101,10 +101,10 @@ Java_com_respirosync_RespiroSyncEngine_nativeGetMetrics(JNIEnv* env, jobject thi
         return nullptr;
     }
     
-    // Fixed signature: 9 parameters matching struct fields
-    // (I = int, F = float) for: current_stage, confidence, breathing_rate_bpm, 
-    // breathing_regularity, movement_intensity, breath_cycles_detected, possible_apnea,
-    // signal_quality, signal_noise_ratio
+    // Constructor signature: 9 parameters (IFFFFFIIIF)V
+    // Parameters: current_stage(I), confidence(F), breathing_rate_bpm(F), 
+    // breathing_regularity(F), movement_intensity(F), breath_cycles_detected(I), 
+    // possible_apnea(I), signal_quality(I), signal_noise_ratio(F), void return(V)
     jmethodID constructor = env->GetMethodID(metricsClass, "<init>", "(IFFFFFIIIF)V");
     if (!constructor) {
         LOGE("Failed to find SleepMetrics constructor");

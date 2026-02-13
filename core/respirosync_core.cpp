@@ -201,7 +201,7 @@ private:
         std::vector<float> recent_durations;
         
         for (auto it = breath_history.rbegin(); it != breath_history.rend(); ++it) {
-            // Check timestamp monotonicity
+            // Check timestamp monotonicity - allow equal timestamps
             if (it->timestamp_ms > now || now - it->timestamp_ms > 30000) break;
             recent_durations.push_back(it->duration_ms);
         }
@@ -589,7 +589,7 @@ extern "C" {
     }
     
     const char* respiro_get_version() {
-        return RESPIROSYNC_VERSION_STRING;
+        return "1.0.0"; // RESPIROSYNC_VERSION_STRING from header
     }
 }
 
