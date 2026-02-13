@@ -6,16 +6,23 @@ on:
   pull_request:
 
 jobs:
-  core-build:
-    name: Build core library
+  core-build-and-test:
+    name: Build and test core library
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Compile RespiroSync core
+      - name: Build core library
         run: |
           g++ -c core/respirosync_core.cpp \
             -std=c++17 \
             -O2 \
+            -Wall \
+            -Wextra \
+            -Werror \
             -o /tmp/respirosync_core.o
+
+      - name: Build and run tests
+        run: |
+          make test

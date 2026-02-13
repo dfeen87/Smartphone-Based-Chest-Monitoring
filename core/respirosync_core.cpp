@@ -37,6 +37,7 @@ struct BreathCycle {
 
 using ::SleepMetrics;
 using ::SleepStage;
+using ::SignalQuality;
 
 // ============================================================================
 // SIGNAL PROCESSING - THE CORE MAGIC
@@ -254,8 +255,74 @@ private:
         return std::max(0.0f, std::min(1.0f, 1.0f - cv));
     }
     
+    // Helper: Assess signal quality based on data characteristics
+    SignalQuality assessSignalQuality(float snr, size_t sample_count, float regularity) {
+        // Require minimum data
+        if (sample_count < 5) {
+            return SIGNAL_QUALITY_UNKNOWN;
+        }
+        
+        // Excellent: high SNR, good regularity, sufficient data
+        if (snr > 5.0f && regularity > 0.7f && sample_count >= 20) {
+            return SIGNAL_QUALITY_EXCELLENT;
+        }
+        
+        // Good: acceptable SNR and regularity
+        if (snr > 3.0f && regularity > 0.5f && sample_count >= 10) {
+            return SIGNAL_QUALITY_GOOD;
+        }
+        
+        // Fair: marginal quality
+        if (snr > 1.5f && sample_count >= 5) {
+            return SIGNAL_QUALITY_FAIR;
+        }
+        
+        // Poor: insufficient quality
+        return SIGNAL_QUALITY_POOR;
+    }
+    
+    // Helper: Calculate signal-to-noise ratio estimate
+    float calculateSNR() {
+        if (breath_history.size() < 3) {
+            return 0.0f;
+        }
+        
+        // Calculate variance in breath amplitudes
+        std::vector<float> amplitudes;
+        for (const auto& cycle : breath_history) {
+            amplitudes.push_back(cycle.amplitude);
+        }
+        
+        float mean_amplitude = 0.0f;
+        for (float a : amplitudes) {
+            mean_amplitude += a;
+        }
+        mean_amplitude /= amplitudes.size();
+        
+        float variance = 0.0f;
+        for (float a : amplitudes) {
+            float diff = a - mean_amplitude;
+            variance += diff * diff;
+        }
+        variance /= amplitudes.size();
+        
+        float noise = std::sqrt(variance);
+        
+        // SNR = signal / noise
+        if (noise < EPSILON) {
+            return 0.0f;
+        }
+        
+        return mean_amplitude / noise;
+    }
+    
     // Helper: Classify sleep stage based on movement + breathing
-    SleepStage classifySleepStage(float movement_intensity, float breathing_regularity) {
+    SleepStage classifySleepStage(float movement_intensity, float breathing_regularity, size_t sample_count) {
+        // Need minimum data to classify
+        if (sample_count < 5) {
+            return UNKNOWN;
+        }
+        
         // Simple rule-based classifier (can upgrade to ML later)
         
         if (movement_intensity > 0.4f) {
@@ -387,6 +454,7 @@ public:
     
     SleepMetrics getCurrentMetrics(uint64_t timestamp_ms) {
         SleepMetrics metrics;
+        std::memset(&metrics, 0, sizeof(metrics));
         
         metrics.breathing_rate_bpm = current_bpm;
         metrics.breath_cycles_detected = (int)breath_history.size();
@@ -398,7 +466,8 @@ public:
         // Classify sleep stage
         metrics.current_stage = classifySleepStage(
             metrics.movement_intensity, 
-            metrics.breathing_regularity
+            metrics.breathing_regularity,
+            breath_history.size()
         );
         
         // Calculate confidence based on data quality
@@ -410,6 +479,14 @@ public:
                                   timestamp_ms - last_breath_time > APNEA_THRESHOLD_MS)
                                      ? 1
                                      : 0;
+        
+        // Advanced signal quality metrics
+        metrics.signal_noise_ratio = calculateSNR();
+        metrics.signal_quality = assessSignalQuality(
+            metrics.signal_noise_ratio,
+            breath_history.size(),
+            metrics.breathing_regularity
+        );
         
         return metrics;
     }
@@ -507,7 +584,12 @@ extern "C" {
             // On error, return safe defaults
             std::memset(out_metrics, 0, sizeof(*out_metrics));
             out_metrics->current_stage = UNKNOWN;
+            out_metrics->signal_quality = SIGNAL_QUALITY_UNKNOWN;
         }
+    }
+    
+    const char* respiro_get_version() {
+        return RESPIROSYNC_VERSION_STRING;
     }
 }
 

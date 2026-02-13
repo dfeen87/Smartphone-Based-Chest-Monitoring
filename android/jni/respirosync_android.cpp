@@ -29,6 +29,8 @@ extern "C" {
         float movement_intensity;
         int breath_cycles_detected;
         int possible_apnea;  // Changed from bool to int to match C API
+        int signal_quality;  // Added signal quality
+        float signal_noise_ratio;  // Added SNR
     } SleepMetrics;
     
     void respiro_get_metrics(RespiroHandle handle, uint64_t timestamp_ms, SleepMetrics* out_metrics);
@@ -99,10 +101,11 @@ Java_com_respirosync_RespiroSyncEngine_nativeGetMetrics(JNIEnv* env, jobject thi
         return nullptr;
     }
     
-    // Fixed signature: 7 parameters matching struct fields
+    // Fixed signature: 9 parameters matching struct fields
     // (I = int, F = float) for: current_stage, confidence, breathing_rate_bpm, 
-    // breathing_regularity, movement_intensity, breath_cycles_detected, possible_apnea
-    jmethodID constructor = env->GetMethodID(metricsClass, "<init>", "(IFFFFFII)V");
+    // breathing_regularity, movement_intensity, breath_cycles_detected, possible_apnea,
+    // signal_quality, signal_noise_ratio
+    jmethodID constructor = env->GetMethodID(metricsClass, "<init>", "(IFFFFFIIIF)V");
     if (!constructor) {
         LOGE("Failed to find SleepMetrics constructor");
         env->DeleteLocalRef(metricsClass);
@@ -119,7 +122,9 @@ Java_com_respirosync_RespiroSyncEngine_nativeGetMetrics(JNIEnv* env, jobject thi
                          metrics.breathing_regularity,
                          metrics.movement_intensity,
                          metrics.breath_cycles_detected,
-                         metrics.possible_apnea);
+                         metrics.possible_apnea,
+                         metrics.signal_quality,
+                         metrics.signal_noise_ratio);
     
     // Clean up local reference to prevent memory leaks
     env->DeleteLocalRef(metricsClass);
