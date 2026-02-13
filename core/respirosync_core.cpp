@@ -115,9 +115,11 @@ private:
     float accel_magnitude_sum_squares;
     
     // Configuration
-    const int BUFFER_SIZE = 256;
-    const float PEAK_THRESHOLD_MULTIPLIER = 0.6f;
-    const uint64_t APNEA_THRESHOLD_MS = 10000; // 10 seconds
+    static constexpr int BUFFER_SIZE = 256;
+    static constexpr float PEAK_THRESHOLD_MULTIPLIER = 0.6f;
+    static constexpr uint64_t APNEA_THRESHOLD_MS = 10000; // 10 seconds
+    static constexpr float EPSILON = 1e-6f; // For floating point comparisons
+    static constexpr float MIN_STDDEV = 1e-6f; // Minimum standard deviation to prevent singularities
     
     // Helper: Calculate magnitude of 3D vector
     float magnitude(const SensorSample& s) {
@@ -135,6 +137,11 @@ private:
     
     // Helper: Detect breathing peaks in filtered signal
     void detectBreathingPeaks(float signal, uint64_t timestamp) {
+        // Validate buffer index (defensive programming)
+        if (buffer_index < 0 || buffer_index >= BUFFER_SIZE) {
+            buffer_index = 0;
+        }
+        
         float outgoing = breathing_signal_buffer[buffer_index];
         breathing_signal_buffer[buffer_index] = signal;
         breathing_signal_sum += signal - outgoing;
@@ -145,6 +152,7 @@ private:
         float mean = breathing_signal_sum / BUFFER_SIZE;
         float variance = (breathing_signal_sum_squares / BUFFER_SIZE) - (mean * mean);
         float stddev = std::sqrt(std::max(0.0f, variance));
+        stddev = std::max(MIN_STDDEV, stddev); // Prevent singularities
         
         peak_threshold = mean + stddev * PEAK_THRESHOLD_MULTIPLIER;
         
@@ -152,7 +160,8 @@ private:
         if (!in_peak && signal > peak_threshold) {
             in_peak = true;
             
-            if (last_peak_time > 0) {
+            // Check for timestamp monotonicity to prevent wraparound issues
+            if (last_peak_time > 0 && timestamp >= last_peak_time) {
                 uint64_t duration = timestamp - last_peak_time;
                 
                 // Valid breath cycle (0.5-6 seconds = 10-120 BPM range)
@@ -160,7 +169,7 @@ private:
                     BreathCycle cycle;
                     cycle.timestamp_ms = timestamp;
                     cycle.duration_ms = (float)duration;
-                    cycle.amplitude = signal / (stddev > 0 ? stddev : 1.0f);
+                    cycle.amplitude = signal / stddev; // stddev already validated to be >= MIN_STDDEV
                     
                     breath_history.push_back(cycle);
                     
@@ -176,7 +185,8 @@ private:
             
             last_peak_time = timestamp;
             last_peak_value = signal;
-        } else if (in_peak && signal < peak_threshold * 0.8f) {
+        } else if (in_peak && signal < (peak_threshold * 0.8f - EPSILON)) {
+            // Use epsilon-based comparison for floating point reliability
             in_peak = false;
         }
     }
@@ -190,7 +200,8 @@ private:
         std::vector<float> recent_durations;
         
         for (auto it = breath_history.rbegin(); it != breath_history.rend(); ++it) {
-            if (now - it->timestamp_ms > 30000) break;
+            // Check timestamp monotonicity
+            if (it->timestamp_ms > now || now - it->timestamp_ms > 30000) break;
             recent_durations.push_back(it->duration_ms);
         }
         
@@ -203,7 +214,10 @@ private:
         }
         avg_duration /= recent_durations.size();
         
-        // Convert to BPM
+        // Convert to BPM - protect against division by zero
+        if (avg_duration < EPSILON) {
+            return 0.0f;
+        }
         return (60000.0f / avg_duration);
     }
     
@@ -228,10 +242,16 @@ private:
         }
         variance /= durations.size();
         
+        // Protect against division by zero
+        if (mean < EPSILON) {
+            return 0.0f;
+        }
+        
         float cv = std::sqrt(variance) / mean;
         
         // Convert to 0-1 scale (lower CV = higher regularity)
-        return std::max(0.0f, 1.0f - cv);
+        // Clamp to ensure result stays in valid range
+        return std::max(0.0f, std::min(1.0f, 1.0f - cv));
     }
     
     // Helper: Classify sleep stage based on movement + breathing
@@ -326,10 +346,12 @@ public:
         // Keep only last 5 seconds
         while (!accel_buffer.empty() && 
                timestamp_ms - accel_buffer.front().timestamp_ms > 5000) {
-            float outgoing_magnitude = accel_magnitude_buffer.front();
-            accel_magnitude_sum -= outgoing_magnitude;
-            accel_magnitude_sum_squares -= outgoing_magnitude * outgoing_magnitude;
-            accel_magnitude_buffer.pop_front();
+            if (!accel_magnitude_buffer.empty()) {
+                float outgoing_magnitude = accel_magnitude_buffer.front();
+                accel_magnitude_sum -= outgoing_magnitude;
+                accel_magnitude_sum_squares -= outgoing_magnitude * outgoing_magnitude;
+                accel_magnitude_buffer.pop_front();
+            }
             accel_buffer.pop_front();
         }
         
@@ -338,8 +360,10 @@ public:
         float chest_motion = removeGravity(accel_magnitude);
         
         // 2. Add gyroscope contribution (angular velocity indicates rotation)
+        // Safe access with explicit empty check
         if (!gyro_buffer.empty()) {
-            chest_motion += magnitude(gyro_buffer.back()) * 0.1f; // Scale factor
+            SensorSample gyro_sample = gyro_buffer.back();
+            chest_motion += magnitude(gyro_sample) * 0.1f; // Scale factor
         }
         
         // 3. Bandpass filter to isolate breathing frequency
@@ -379,7 +403,7 @@ public:
         
         // Calculate confidence based on data quality
         int samples_available = (int)breath_history.size();
-        metrics.confidence = std::min(1.0f, samples_available / 20.0f);
+        metrics.confidence = std::min(1.0f, static_cast<float>(samples_available) / 20.0f);
         
         // Check for apnea (no breath detected in >10 seconds)
         metrics.possible_apnea = (last_breath_time > 0 &&
@@ -406,35 +430,66 @@ extern "C" {
     using namespace RespiroSync;
     
     RespiroHandle respiro_create() {
-        return new RespiroEngine();
+        try {
+            return new RespiroEngine();
+        } catch (const std::exception& e) {
+            // In case of allocation failure, return null
+            return nullptr;
+        } catch (...) {
+            return nullptr;
+        }
     }
     
     void respiro_destroy(RespiroHandle handle) {
         if (!handle) {
             return;
         }
-        delete static_cast<RespiroEngine*>(handle);
+        try {
+            delete static_cast<RespiroEngine*>(handle);
+        } catch (...) {
+            // Suppress any exceptions during destruction
+        }
     }
     
     void respiro_start_session(RespiroHandle handle, uint64_t timestamp_ms) {
         if (!handle) {
             return;
         }
-        static_cast<RespiroEngine*>(handle)->startSession(timestamp_ms);
+        try {
+            static_cast<RespiroEngine*>(handle)->startSession(timestamp_ms);
+        } catch (...) {
+            // Suppress exceptions - best effort
+        }
     }
     
     void respiro_feed_gyro(RespiroHandle handle, float x, float y, float z, uint64_t timestamp_ms) {
         if (!handle) {
             return;
         }
-        static_cast<RespiroEngine*>(handle)->feedGyroscope(x, y, z, timestamp_ms);
+        // Validate input - check for NaN and infinity
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+            return; // Reject invalid sensor data
+        }
+        try {
+            static_cast<RespiroEngine*>(handle)->feedGyroscope(x, y, z, timestamp_ms);
+        } catch (...) {
+            // Suppress exceptions - best effort
+        }
     }
     
     void respiro_feed_accel(RespiroHandle handle, float x, float y, float z, uint64_t timestamp_ms) {
         if (!handle) {
             return;
         }
-        static_cast<RespiroEngine*>(handle)->feedAccelerometer(x, y, z, timestamp_ms);
+        // Validate input - check for NaN and infinity
+        if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+            return; // Reject invalid sensor data
+        }
+        try {
+            static_cast<RespiroEngine*>(handle)->feedAccelerometer(x, y, z, timestamp_ms);
+        } catch (...) {
+            // Suppress exceptions - best effort
+        }
     }
     
     void respiro_get_metrics(RespiroHandle handle, uint64_t timestamp_ms, SleepMetrics* out_metrics) {
@@ -446,7 +501,13 @@ extern "C" {
             out_metrics->current_stage = UNKNOWN;
             return;
         }
-        *out_metrics = static_cast<RespiroEngine*>(handle)->getCurrentMetrics(timestamp_ms);
+        try {
+            *out_metrics = static_cast<RespiroEngine*>(handle)->getCurrentMetrics(timestamp_ms);
+        } catch (...) {
+            // On error, return safe defaults
+            std::memset(out_metrics, 0, sizeof(*out_metrics));
+            out_metrics->current_stage = UNKNOWN;
+        }
     }
 }
 
