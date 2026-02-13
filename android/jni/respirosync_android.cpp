@@ -28,7 +28,9 @@ extern "C" {
         float breathing_regularity;
         float movement_intensity;
         int breath_cycles_detected;
-        bool possible_apnea;
+        int possible_apnea;  // Changed from bool to int to match C API
+        int signal_quality;  // Added signal quality
+        float signal_noise_ratio;  // Added SNR
     } SleepMetrics;
     
     void respiro_get_metrics(RespiroHandle handle, uint64_t timestamp_ms, SleepMetrics* out_metrics);
@@ -89,28 +91,45 @@ Java_com_respirosync_RespiroSyncEngine_nativeGetMetrics(JNIEnv* env, jobject thi
                        static_cast<uint64_t>(timestamp_ms),
                        &metrics);
     
-    // Create Java SleepMetrics object
+    // Create Java SleepMetrics object with proper exception handling
     jclass metricsClass = env->FindClass("com/respirosync/SleepMetrics");
     if (!metricsClass) {
         LOGE("Failed to find SleepMetrics class");
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
         return nullptr;
     }
     
-    jmethodID constructor = env->GetMethodID(metricsClass, "<init>", "(IFFFFFIZ)V");
+    // Constructor signature: 9 parameters (IFFFFFIIIF)V
+    // Parameters: current_stage(I), confidence(F), breathing_rate_bpm(F), 
+    // breathing_regularity(F), movement_intensity(F), breath_cycles_detected(I), 
+    // possible_apnea(I), signal_quality(I), signal_noise_ratio(F), void return(V)
+    jmethodID constructor = env->GetMethodID(metricsClass, "<init>", "(IFFFFFIIIF)V");
     if (!constructor) {
         LOGE("Failed to find SleepMetrics constructor");
+        env->DeleteLocalRef(metricsClass);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
         return nullptr;
     }
     
-    return env->NewObject(metricsClass, constructor,
+    jobject result = env->NewObject(metricsClass, constructor,
                          metrics.current_stage,
                          metrics.confidence,
                          metrics.breathing_rate_bpm,
                          metrics.breathing_regularity,
                          metrics.movement_intensity,
-                         (jfloat)metrics.breath_cycles_detected,
                          metrics.breath_cycles_detected,
-                         metrics.possible_apnea);
+                         metrics.possible_apnea,
+                         metrics.signal_quality,
+                         metrics.signal_noise_ratio);
+    
+    // Clean up local reference to prevent memory leaks
+    env->DeleteLocalRef(metricsClass);
+    
+    return result;
 }
 
 } // extern "C"
