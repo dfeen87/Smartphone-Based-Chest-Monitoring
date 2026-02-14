@@ -1,8 +1,41 @@
-# RespiroSync Chest Based Respiratory Monitoring System
+<div align="center">
+<a name="top"></a>
 
-MIT License.
+# RespiroSync
+### Chest-Based Respiratory Monitoring System
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/dfeen87/RespiroSync-Chest-Based-Respiratory-Monitoring-System)
+[![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey.svg)](https://github.com/dfeen87/RespiroSync-Chest-Based-Respiratory-Monitoring-System)
+[![C++](https://img.shields.io/badge/C++-17-00599C.svg)](https://isocpp.org/)
 
 **Cross-Platform Respiratory & Sleep Monitoring Using Smartphone Motion Sensors**
+
+</div>
+
+---
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [What Is RespiroSync?](#what-is-respirosync)
+- [Why This Works](#why-this-works)
+- [Project Status](#project-status)
+- [Key Features](#key-features)
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [Building](#building)
+- [Use Cases](#use-cases)
+- [Performance](#performance)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [Citation](#citation)
+- [License](#license)
+- [Support](#support)
+
+---
+
+## Overview
 
 RespiroSync is a portable, on-device engine for estimating respiratory patterns and sleep metrics using only a smartphone's built-in accelerometer and gyroscope. By leveraging chest-mounted motion signals, RespiroSync provides low-cost, hardware-free access to respiratory insights traditionally requiring specialized equipment.
 
@@ -10,51 +43,79 @@ RespiroSync is a portable, on-device engine for estimating respiratory patterns 
 
 RespiroSync transforms a chest-mounted smartphone into a passive respiratory monitoring system capable of estimating:
 
-🫁 Breathing rate (BPM)
+| Metric | Description |
+|--------|-------------|
+| 🫁 **Breathing Rate** | Real-time BPM (breaths per minute) tracking |
+| 😴 **Sleep Stages** | Heuristic classification (Awake, Light, Deep, REM) |
+| ⚠️ **Irregularities** | Detection of prolonged breathing pauses |
+| 📊 **Quality Indicators** | Sleep regularity, movement, and confidence scoring |
 
-😴 Sleep stage heuristics (Awake, Light, Deep, REM)
+### What You Need
 
-⚠️ Breathing irregularities (e.g., prolonged pauses)
+✅ **No wristbands**  
+✅ **No rings**  
+✅ **No external sensors**  
 
-📊 Sleep quality indicators (regularity, movement, confidence)
-
-**No wristbands.**
-**No rings.**
-**No external sensors.**
-
-Just a smartphone securely positioned on the chest (e.g., vest, compression garment, band).
+Just a smartphone securely positioned on the chest (e.g., vest, compression garment, or band).
 
 ## Why This Works
 
 Most consumer sleep trackers rely on indirect proxies such as wrist-based heart rate or expensive chest hardware. RespiroSync takes a different approach:
 
-**Chest-mounted motion directly encodes respiratory mechanics.**
+> **Chest-mounted motion directly encodes respiratory mechanics.**
 
-The core engine performs:
+### Signal Processing Pipeline
+
+The core engine performs the following operations:
 
 ```
-Accelerometer + Gyroscope (chest-mounted)
-        ↓
-Gravity removal & sensor fusion
-        ↓
-Breathing-frequency bandpass filtering (≈0.1–0.5 Hz)
-        ↓
-Dynamic peak detection
-        ↓
-Breath cycle estimation
-        ↓
-Respiratory + sleep metrics
+┌─────────────────────────────────────┐
+│ Accelerometer + Gyroscope           │
+│ (chest-mounted)                     │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ Gravity Removal & Sensor Fusion     │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ Breathing-Frequency Bandpass        │
+│ Filtering (≈0.1–0.5 Hz)             │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ Dynamic Peak Detection              │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ Breath Cycle Estimation             │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ Respiratory + Sleep Metrics         │
+└─────────────────────────────────────┘
 ```
 
 This repository contains the core algorithm and bindings that make this pipeline portable and efficient.
 
 ## Project Status
 
-**Version:** 1.0.0  
-**Stability:** Stable public C API  
-**Scope:** Respiratory & sleep inference (heuristic, non-diagnostic)
+| Attribute | Status |
+|-----------|--------|
+| **Version** | 1.0.0 |
+| **Stability** | Stable public C API |
+| **Scope** | Respiratory & sleep inference (heuristic, non-diagnostic) |
+| **Dependencies** | None (self-contained) |
+| **Processing** | 100% on-device |
 
 RespiroSync prioritizes architectural clarity and correctness over feature breadth. All signal processing occurs on-device, with no cloud dependency.
+
+> ⚠️ **Important:** RespiroSync provides heuristic, informational metrics. It is **not a medical device** and should not be used for diagnostic purposes.
 
 ## Quick Start
 
@@ -88,68 +149,106 @@ handler.postDelayed(object : Runnable {
 }, 1000)
 ```
 
-## Core Capabilities
+## Key Features
 
-✅ Real-time respiratory rate estimation
+### Core Capabilities
 
-✅ Breath cycle detection and regularity analysis
+| Feature | Description |
+|---------|-------------|
+| ✅ **Real-time Respiratory Rate** | Continuous BPM estimation with high accuracy |
+| ✅ **Breath Cycle Detection** | Individual breath tracking and regularity analysis |
+| ✅ **Sleep Stage Classification** | Heuristic multi-stage sleep analysis |
+| ✅ **Pause Detection** | Identification of prolonged breathing pauses |
+| ✅ **Movement Tracking** | Restlessness and motion pattern analysis |
+| ✅ **Confidence Scoring** | Signal quality-based reliability metrics |
 
-✅ Heuristic sleep stage classification
+### Technical Characteristics
 
-✅ Detection of prolonged breathing pauses
-
-✅ Movement and restlessness tracking
-
-✅ Confidence scoring based on signal quality
-
-## Technical Characteristics
-
-⚡ Low overhead: typically <2% CPU, <10 MB RAM
-
-🔋 Battery-efficient: <5% overnight drain (typical devices)
-
-🔒 Privacy-first: 100% on-device processing
-
-📱 Cross-platform: Android & iOS via a shared C++ core
-
-🧩 No dependencies: portable, self-contained engine
-
-**Metrics are heuristic and informational. RespiroSync is not a medical device.**
+| Characteristic | Value |
+|----------------|-------|
+| ⚡ **CPU Usage** | Typically < 2% |
+| 💾 **Memory Footprint** | < 10 MB RAM |
+| 🔋 **Battery Impact** | < 5% overnight drain (typical devices) |
+| 🔒 **Privacy** | 100% on-device processing |
+| 📱 **Platforms** | Android & iOS via shared C++ core |
+| 🧩 **Dependencies** | None - portable, self-contained engine |
 
 ## Architecture
 
+### System Overview
+
 ```
-respirosync_core.cpp   ← Core signal processing (C++)
-        ▲
-        │  Stable C API
-        ▼
-respirosync_ios.mm     ← iOS Core Motion bridge
-respirosync_android.cpp← Android SensorManager bridge
-        ▼
-Swift / Kotlin API     ← Application layer
+┌──────────────────────────────────────┐
+│   respirosync_core.cpp               │
+│   Core signal processing (C++)       │
+└──────────────┬───────────────────────┘
+               │
+               │  Stable C API
+               │
+       ┌───────┴────────┐
+       │                │
+       ▼                ▼
+┌──────────────┐ ┌──────────────────┐
+│ respirosync_ │ │ respirosync_     │
+│ ios.mm       │ │ android.cpp      │
+│              │ │                  │
+│ iOS Core     │ │ Android Sensor   │
+│ Motion       │ │ Manager bridge   │
+│ bridge       │ │                  │
+└──────┬───────┘ └────────┬─────────┘
+       │                  │
+       ▼                  ▼
+┌──────────────┐ ┌──────────────────┐
+│ Swift API    │ │ Kotlin API       │
+│              │ │                  │
+│ Application  │ │ Application      │
+│ layer        │ │ layer            │
+└──────────────┘ └──────────────────┘
 ```
 
-**One core engine.**  
-**Thin platform bindings.**  
-**Deterministic behavior across platforms.**
+### Design Principles
 
-See:
+- **One core engine** - Single source of truth for all platforms
+- **Thin platform bindings** - Minimal platform-specific code
+- **Deterministic behavior** - Consistent results across platforms
 
-- `docs/ARCHITECTURE.md`
-- `docs/SIGNALS.md`
-- `docs/PLATFORMS.md`
+### Documentation
+
+For detailed information, see:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) - System design and components
+- [`docs/SIGNALS.md`](docs/SIGNALS.md) - Signal processing details
+- [`docs/PLATFORMS.md`](docs/PLATFORMS.md) - Platform-specific implementation
+- [`docs/BUILDING.md`](docs/BUILDING.md) - Complete build instructions
+- [`docs/SECURITY.md`](docs/SECURITY.md) - Security considerations
 
 ## Building
+
+### Prerequisites
+
+- **iOS:** Xcode 12+ with Swift 5.3+
+- **Android:** Android NDK r21+, CMake 3.10+
+- **C++ Compiler:** Clang or GCC with C++17 support
 
 ### iOS (Static Library)
 
 ```bash
+# Navigate to the core directory
+cd core
+
+# Compile the core engine
 clang++ -c respirosync_core.cpp -std=c++17 -O3 -o core.o
+
+# Compile the iOS bridge
 clang++ -c respirosync_ios.mm -framework CoreMotion -o ios.o
+
+# Create static library
 ar rcs librespirosync.a core.o ios.o
 ```
 
 ### Android (CMake)
+
+Add to your `CMakeLists.txt`:
 
 ```cmake
 add_library(
@@ -158,60 +257,111 @@ add_library(
     respirosync_core.cpp
     respirosync_android.cpp
 )
+
+# Link required Android libraries
+target_link_libraries(respirosync android log)
 ```
 
-See project documentation for full build instructions.
+### Quick Build (Makefile)
+
+```bash
+# Build for all platforms
+make all
+
+# Build for specific platform
+make ios
+make android
+
+# Clean build artifacts
+make clean
+```
+
+For comprehensive build instructions and troubleshooting, see [`docs/BUILDING.md`](docs/BUILDING.md).
 
 ## Use Cases
 
 ### Consumer Applications
 
-- Sleep tracking
-- Meditation & breathwork apps
-- Fitness & recovery monitoring
-- Infant or passive breathing observation
+- **Sleep Tracking** - Monitor sleep patterns and quality
+- **Meditation & Breathwork** - Guide breathing exercises and relaxation
+- **Fitness & Recovery** - Track respiratory patterns during rest and recovery
+- **Infant Monitoring** - Passive breathing observation (non-medical)
 
 ### Research & Clinical Exploration
 
-- Sleep studies
-- Respiratory pattern analysis
-- Remote monitoring research
-- Low-cost alternatives to traditional instrumentation
+- **Sleep Studies** - Research-grade sleep pattern analysis
+- **Respiratory Analysis** - Study breathing patterns and irregularities
+- **Remote Monitoring** - Longitudinal respiratory data collection
+- **Cost-Effective Research** - Low-cost alternative to traditional instrumentation
 
 ### Hardware & Embedded Systems
 
-- Smart garments
-- Athletic performance wearables
-- Experimental medical devices
-- Veterinary monitoring
+- **Smart Garments** - Integration with wearable textiles
+- **Athletic Wearables** - Performance monitoring devices
+- **Experimental Devices** - Prototype development platform
+- **Veterinary Monitoring** - Animal respiratory tracking
 
-## Performance Snapshot
+> **Note:** All use cases are for informational and research purposes. RespiroSync is not intended for medical diagnosis or treatment.
 
-Tested on representative devices:
+## Performance
 
-- **iPhone 12 Pro:** ~1.2% CPU, ~8 MB RAM, ~3% battery / 8 hrs
-- **Pixel 6:** ~1.8% CPU, ~9 MB RAM, ~4% battery / 8 hrs
-- **Galaxy S21:** ~1.5% CPU, ~9 MB RAM, ~4% battery / 8 hrs
+### Benchmark Results
 
-Respiratory rate estimation shows strong correlation with reference sensors in controlled tests.
+Tested on representative devices under typical usage conditions:
+
+| Device | CPU Usage | RAM Usage | Battery Drain (8hrs) |
+|--------|-----------|-----------|---------------------|
+| iPhone 12 Pro | ~1.2% | ~8 MB | ~3% |
+| Google Pixel 6 | ~1.8% | ~9 MB | ~4% |
+| Samsung Galaxy S21 | ~1.5% | ~9 MB | ~4% |
+
+### Accuracy
+
+Respiratory rate estimation shows strong correlation with reference sensors in controlled tests. Detailed validation metrics are available in the research documentation.
+
+### Optimization Notes
+
+- All processing occurs in real-time with minimal latency
+- No data buffering or cloud synchronization required
+- Optimized for low-power operation during extended monitoring sessions
+
+## Documentation
+
+Comprehensive documentation is available in the [`docs/`](docs/) directory:
+
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and component overview |
+| [BUILDING.md](docs/BUILDING.md) | Complete build instructions for all platforms |
+| [QUICKSTART.md](docs/QUICKSTART.md) | Quick integration guide |
+| [SIGNALS.md](docs/SIGNALS.md) | Signal processing algorithms and filters |
+| [PLATFORMS.md](docs/PLATFORMS.md) | Platform-specific implementation details |
+| [SECURITY.md](docs/SECURITY.md) | Security considerations and best practices |
+| [CHANGELOG.md](docs/CHANGELOG.md) | Version history and updates |
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome and appreciated! We're particularly interested in:
 
-Areas of interest:
+- 🧪 **Validation & Benchmarking** - Real-world testing and accuracy studies
+- 🤖 **Advanced Models** - Improved sleep classification algorithms
+- 📱 **Platform Optimizations** - Performance improvements and new platform support
+- 🐛 **Edge Cases** - Bug reports and fixes for unusual scenarios
+- 🌍 **Documentation** - Improvements to guides, examples, and translations
 
-🧪 Validation and benchmarking
+### Getting Started
 
-🤖 Advanced sleep classification models
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-📱 Platform optimizations
+For detailed contribution guidelines, please see the project documentation.
 
-🐛 Real-world edge cases
+### Code of Conduct
 
-🌍 Documentation improvements
-
-See `CONTRIBUTING.md` for guidelines.
+We are committed to providing a welcoming and inclusive environment. Please be respectful and professional in all interactions.
 
 ## Citation
 
@@ -222,41 +372,63 @@ If you use RespiroSync in academic or technical work, please cite:
   author = {Feeney, Don Michael Jr.},
   title  = {RespiroSync: Chest-Mounted Respiratory Monitoring via Smartphone Sensors},
   year   = {2025},
-  url    = {https://github.com/dfeen87/RespiroSync-Chest-Based-Respiratory-Monitoring-System}
+  url    = {https://github.com/dfeen87/RespiroSync-Chest-Based-Respiratory-Monitoring-System},
+  version = {1.0.0}
 }
 ```
 
 ## License
 
-MIT License with attribution requirement.  
-Commercial use is permitted.
+RespiroSync is licensed under the **MIT License** with attribution requirement.
 
-See `LICENSE` for details.
+- ✅ Commercial use permitted
+- ✅ Modification and distribution allowed
+- ✅ Private use allowed
+- ℹ️ Attribution required
 
-## Recognition
+See [`LICENSE`](LICENSE) for complete details.
 
-If you build a product using RespiroSync:
+### Attribution
 
-- Include "Powered by RespiroSync™"
-- Link back to this repository
+If you build a product using RespiroSync, please include:
 
-That's it.
+- **Credit:** "Powered by RespiroSync™"
+- **Link:** [https://github.com/dfeen87/RespiroSync-Chest-Based-Respiratory-Monitoring-System](https://github.com/dfeen87/RespiroSync-Chest-Based-Respiratory-Monitoring-System)
 
-## Origin
+That's it. Simple attribution helps support continued development.
 
-RespiroSync began with a simple realization:  
-**smartphones already contain the sensors needed for meaningful respiratory monitoring.**
+## Support
 
-This project exists to make that capability accessible, inspectable, and reusable.
+### Contact
 
-## Contact
+- 📧 **Email:** [dfeen87@gmail.com](mailto:dfeen87@gmail.com)
+- 💼 **LinkedIn:** [Don Michael Feeney Jr.](https://www.linkedin.com/in/don-michael-feeney-jr-908a96351)
+- 🐛 **Issues:** [GitHub Issues](https://github.com/dfeen87/RespiroSync-Chest-Based-Respiratory-Monitoring-System/issues)
 
-📧 **Email:** dfeen87@gmail.com
+### Community
 
-💼 **LinkedIn:** https://www.linkedin.com/in/don-michael-feeney-jr-908a96351
+If RespiroSync helped you or your project, please consider:
 
-If this project helped you, consider starring the repo — it genuinely helps independent developers.
+- ⭐ **Starring the repository** - It helps others discover the project
+- 🐦 **Sharing** - Tell others about your experience
+- 💬 **Feedback** - Open an issue with suggestions or questions
+
+### Acknowledgments
+
+RespiroSync began with a simple realization:
+
+> **Smartphones already contain the sensors needed for meaningful respiratory monitoring.**
+
+This project exists to make that capability accessible, inspectable, and reusable for developers, researchers, and innovators worldwide.
 
 ---
 
-*"The best way to predict the future is to invent it — and then give others the tools to build on it."*
+<div align="center">
+
+**"The best way to predict the future is to invent it — and then give others the tools to build on it."**
+
+Made with ❤️ by [Don Michael Feeney Jr.](https://github.com/dfeen87)
+
+[⬆ Back to Top](#top)
+
+</div>
