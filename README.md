@@ -1,6 +1,6 @@
 <div align="center">
 
-# RespiroSync™
+# RespiroSync
 ### Chest-Based Respiratory Monitoring System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -257,6 +257,7 @@ add_library(
     respirosync_android.cpp
 )
 
+# Link required Android libraries
 target_link_libraries(respirosync android log)
 ```
 
