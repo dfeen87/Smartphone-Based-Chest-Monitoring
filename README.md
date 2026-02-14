@@ -1,4 +1,5 @@
 <div align="center">
+<a name="top"></a>
 
 # RespiroSync
 ### Chest-Based Respiratory Monitoring System
@@ -428,6 +429,6 @@ This project exists to make that capability accessible, inspectable, and reusabl
 
 Made with ❤️ by [Don Michael Feeney Jr.](https://github.com/dfeen87)
 
-[⬆ Back to Top](#respirosync)
+[⬆ Back to Top](#top)
 
 </div>
