@@ -142,6 +142,24 @@ Instability ⟺ ΔΦ(t) > α · σ_ω
 
 ---
 
+## 📊 Live Monitoring Dashboard
+
+Access the real‑time respiratory monitoring dashboard here:  
+**https://smartphone-based-chest-monitoring.onrender.com/**
+
+The dashboard provides:
+
+- **Live system status** with health and readiness indicators  
+- **Real‑time logs** streamed directly from the backend  
+- **Validation controls** for running multi‑record BIDMC evaluations  
+- **Downloadable results** in CSV, PDF, and DOCX formats  
+- **Email delivery** for sending validation reports  
+- **Mobile‑friendly UI** designed for smartphone‑based monitoring workflows  
+
+This interface turns the full respiratory operator pipeline into an accessible, interactive tool for research, validation, and demonstration.
+
+---
+
 ## Quick Start
 
 ### iOS (Swift)
