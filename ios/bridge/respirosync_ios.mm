@@ -6,28 +6,10 @@
 #import <Foundation/Foundation.h>
 #import <CoreMotion/CoreMotion.h>
 
-// Include the C API from core
-extern "C" {
-    typedef void* RespiroHandle;
-    
-    RespiroHandle respiro_create();
-    void respiro_destroy(RespiroHandle handle);
-    void respiro_start_session(RespiroHandle handle, uint64_t timestamp_ms);
-    void respiro_feed_gyro(RespiroHandle handle, float x, float y, float z, uint64_t timestamp_ms);
-    void respiro_feed_accel(RespiroHandle handle, float x, float y, float z, uint64_t timestamp_ms);
-    
-    typedef struct {
-        int current_stage;          // 0=AWAKE, 1=LIGHT, 2=DEEP, 3=REM, 4=UNKNOWN
-        float confidence;
-        float breathing_rate_bpm;
-        float breathing_regularity;
-        float movement_intensity;
-        int breath_cycles_detected;
-        bool possible_apnea;
-    } SleepMetrics;
-    
-    void respiro_get_metrics(RespiroHandle handle, uint64_t timestamp_ms, SleepMetrics* out_metrics);
-}
+// Use the canonical C API header so the SleepMetrics struct layout always
+// matches the core engine exactly (avoids out-of-bounds reads when fields
+// are added to the struct).
+#include "../../core/respirosync_core.h"
 
 // ============================================================================
 // Objective-C Wrapper
@@ -41,6 +23,10 @@ extern "C" {
 @property (nonatomic, assign) CGFloat movementIntensity;   // 0.0-1.0
 @property (nonatomic, assign) NSInteger breathCyclesDetected;
 @property (nonatomic, assign) BOOL possibleApnea;
+@property (nonatomic, assign) NSInteger signalQuality;     // 0-4 (EXCELLENT–UNKNOWN)
+@property (nonatomic, assign) CGFloat signalNoiseRatio;
+@property (nonatomic, assign) CGFloat instabilityScore;    // ΔΦ(t) in rad/s  (Eq. 5)
+@property (nonatomic, assign) BOOL instabilityDetected;    // ΔΦ(t) > α·σ_ω  (Eq. 6)
 @end
 
 @implementation RespiroSyncMetrics
@@ -157,6 +143,10 @@ extern "C" {
     metrics.movementIntensity = cMetrics.movement_intensity;
     metrics.breathCyclesDetected = cMetrics.breath_cycles_detected;
     metrics.possibleApnea = cMetrics.possible_apnea;
+    metrics.signalQuality = cMetrics.signal_quality;
+    metrics.signalNoiseRatio = cMetrics.signal_noise_ratio;
+    metrics.instabilityScore = cMetrics.instability_score;
+    metrics.instabilityDetected = cMetrics.instability_detected;
     
     return metrics;
 }

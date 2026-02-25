@@ -783,7 +783,7 @@ extern "C" {
     }
     
     const char* respiro_get_version() {
-        return "1.0.0"; // RESPIROSYNC_VERSION_STRING from header
+        return RESPIROSYNC_VERSION_STRING;
     }
 }
 
