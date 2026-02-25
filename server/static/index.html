@@ -477,6 +477,7 @@ async function connect() {
     // Refresh all panels now that we have a valid token
     loadStatus();
     loadConfig();
+    loadMetrics();
     loadLogs();
   } catch (e) {
     el.textContent = "✗ " + e.message;
@@ -564,6 +565,29 @@ async function saveConfig() {
     setRunStatus("✓ Configuration saved", "var(--green)");
   } catch (e) {
     setRunStatus("✗ Config save failed: " + e.message, "var(--red)");
+  }
+}
+
+/* ── Metrics (last run) ──────────────────────────────────────────── */
+/**
+ * Fetch the metrics from the most recent operator run and populate the
+ * Operator Output Metrics panel.  When no run has been performed yet in
+ * the current server session the panel is left at its default "—" state.
+ */
+async function loadMetrics() {
+  try {
+    const m = await apiFetch("/api/metrics");
+    if (!m || Object.keys(m).length === 0) return; // no run yet — leave defaults
+    document.getElementById("m-sigma").textContent       = fmt(m.sigma_omega,   5);
+    document.getElementById("m-threshold").textContent   = fmt(m.threshold,     5);
+    document.getElementById("m-dphi-max").textContent    = fmt(m.delta_phi_max, 4);
+    document.getElementById("m-dphi-mean").textContent   = fmt(m.delta_phi_mean, 4);
+    document.getElementById("m-inst-rate").textContent   = (m.instability_rate * 100).toFixed(2) + "%";
+    document.getElementById("m-inst-count").textContent  = m.instability_count;
+    document.getElementById("m-duration").textContent    = m.duration_s;
+    document.getElementById("m-samples").textContent     = m.n_samples;
+  } catch (e) {
+    console.error("loadMetrics:", e);
   }
 }
 
@@ -786,6 +810,7 @@ document.getElementById("auto-refresh").addEventListener("change", scheduleRefre
     await ensureToken();          // succeeds immediately if token cached
     loadStatus();
     loadConfig();
+    loadMetrics();
     loadLogs();
     scheduleRefresh();
   } catch (_) {
