@@ -254,6 +254,48 @@ bool test_multiple_sessions() {
     return true;
 }
 
+// Test: Phase–memory operator fields populated
+// Validates the instability_score (ΔΦ) and instability_detected fields
+// added per PAPER.md §4 (Eqs. 5–6).
+bool test_phase_memory_operator() {
+    RespiroHandle handle = respiro_create();
+    TEST_ASSERT(handle != nullptr, "Failed to create engine");
+
+    respiro_start_session(handle, 0);
+
+    // Feed a stable sinusoidal breathing signal at 0.25 Hz (15 BPM)
+    const int sample_rate = 50;
+    const float breathing_hz = 0.25f;
+    const int duration_s = 15;
+
+    for (int i = 0; i < sample_rate * duration_s; i++) {
+        uint64_t ts = (uint64_t)(i * (1000 / sample_rate));
+        float t = i / (float)sample_rate;
+        float chest = 0.1f * sinf(2.0f * 3.14159265f * breathing_hz * t);
+        respiro_feed_accel(handle, 0.0f, 0.0f, 9.81f + chest, ts);
+        respiro_feed_gyro(handle, 0.0f, 0.0f, 0.0f, ts);
+    }
+
+    SleepMetrics metrics;
+    respiro_get_metrics(handle, (uint64_t)(duration_s * 1000), &metrics);
+
+    // instability_score must be non-negative (it is |ω − ω̄|)
+    TEST_ASSERT(metrics.instability_score >= 0.0f,
+                "instability_score must be non-negative");
+
+    // instability_detected must be 0 or 1
+    TEST_ASSERT(metrics.instability_detected == 0 || metrics.instability_detected == 1,
+                "instability_detected must be boolean");
+
+    // For a stable periodic signal the score should remain low once the
+    // baseline calibration window has elapsed (250 samples ≈ 5 s).
+    // We only test the structural contract here, not a numeric bound.
+
+    respiro_destroy(handle);
+    return true;
+}
+
+
 int main() {
     printf("RespiroSync Core Engine Test Suite\n");
     printf("===================================\n\n");
@@ -270,6 +312,7 @@ int main() {
     RUN_TEST(test_simulated_breathing);
     RUN_TEST(test_metrics_ranges);
     RUN_TEST(test_multiple_sessions);
+    RUN_TEST(test_phase_memory_operator);
     
     printf("\n===================================\n");
     printf("Results: %d total, %d passed, %d failed\n", total, passed, failed);

@@ -17,6 +17,21 @@ extern "C" {
  * This header defines the binding contract for the RespiroSync core engine.
  * The implementation is provided by a C++ backend and exposed via an opaque
  * handle for ABI stability across platforms and languages.
+ *
+ * Scientific basis: "A Deterministic Phase–Memory Operator for Early
+ * Respiratory Instability Detection Using Smartphone-Based Chest Monitoring"
+ * (see PAPER.md).  The core pipeline implements the deterministic phase–memory
+ * operator described in that manuscript:
+ *
+ *   x(t)   – scalar respiration channel (Eq. 1)
+ *   z(t)   – analytic signal via Hilbert transform (Eq. 2)
+ *   θ(t)   – instantaneous phase = arg(z(t))
+ *   ω(t)   – instantaneous phase velocity = dθ/dt (Eq. 3)
+ *   ω̄(t)  – short-term phase memory = rolling mean of ω (Eq. 4)
+ *   ΔΦ(t) – instability metric = |ω(t) − ω̄(t)| (Eq. 5)
+ *
+ * Instability is declared when ΔΦ(t) > α · σ_ω (Eq. 6), optionally
+ * sustained over L consecutive samples (Eq. 7).
  * ============================================================================
  */
 
@@ -83,10 +98,23 @@ typedef struct {
 
     int   breath_cycles_detected;
     int   possible_apnea;           /* boolean (0 = false, 1 = true) */
-    
+
     /* Advanced metrics (v1.1+) */
     SignalQuality signal_quality;   /* Overall signal quality assessment */
     float signal_noise_ratio;       /* Estimated SNR (0.0 - 10.0+) */
+
+    /* Phase–memory operator metrics (PAPER.md §3–4)
+     *
+     * instability_score  – ΔΦ(t) = |ω(t) − ω̄(t)|  (Eq. 5)
+     *                      Phase–memory divergence in rad/s.
+     *                      Near zero during stable breathing; elevated during
+     *                      frequency drift, pauses, or burst irregularities.
+     *
+     * instability_detected – 1 when ΔΦ(t) > α · σ_ω  (Eq. 6), else 0.
+     *                        α is the sensitivity parameter (default: 2.0).
+     */
+    float instability_score;        /* ΔΦ(t) – phase–memory divergence (rad/s) */
+    int   instability_detected;     /* boolean (0 = stable, 1 = unstable) */
 } SleepMetrics;
 
 /* -----------------------------
