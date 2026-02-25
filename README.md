@@ -33,6 +33,8 @@
 - [Building](#building)
 - [Reproducibility Layer](#reproducibility-layer)
 - [Validation Protocol](#validation-protocol)
+- [PhysioNet / Real-Data Validation](#physionet--real-data-validation)
+- [Data Sources & Citations](#data-sources--citations)
 - [Use Cases](#use-cases)
 - [Performance](#performance)
 - [Documentation](#documentation)
@@ -303,6 +305,136 @@ Benchmarked against RMS-envelope and FFT-peak-shift baselines (PAPER.md §5.2).
 Primary outcomes: detection latency, false alarm rate, compute cost (PAPER.md §5.3).
 
 See [`docs/VALIDATION.md`](docs/VALIDATION.md) for the full protocol.
+
+---
+
+## PhysioNet / Real-Data Validation
+
+The `validation/` directory provides a complete semi-real validation pipeline
+using the PhysioNet **BIDMC Respiratory Dataset**
+(https://physionet.org/content/bidmc/1.0.0/).
+
+### Prerequisites
+
+```bash
+pip install -r validation/requirements.txt
+```
+
+### Run on real PhysioNet data
+
+```bash
+# Downloads BIDMC record 1 from PhysioNet (requires internet)
+python validation/validate_bidmc.py
+
+# Use a specific record (1–53)
+python validation/validate_bidmc.py --record 5
+```
+
+### Run offline (synthetic fallback — no internet required)
+
+```bash
+python validation/validate_bidmc.py --synthetic
+```
+
+### What the script produces
+
+| Output | Description |
+|--------|-------------|
+| `validation/figures/regime1_stable.png` | Stable breathing — ΔΦ(t) ≈ 0 (PAPER.md §5.1 row 1) |
+| `validation/figures/regime2_drift.png` | Frequency drift — ΔΦ(t) rises (PAPER.md §5.1 row 2) |
+| `validation/figures/regime3_pause.png` | Breathing pause — ΔΦ(t) spikes (PAPER.md §5.1 row 3) |
+| `validation/figures/comparison_baselines.png` | ΔΦ(t) vs RMS envelope vs FFT peak shift (PAPER.md §5.2) |
+| Console summary | Detection latency, false alarm rate, σ_ω, threshold (PAPER.md Table 1) |
+
+### Pipeline modules
+
+| Module | Description |
+|--------|-------------|
+| `validation/physionet_loader.py` | BIDMC data loader — downloads, extracts RESP channel, resamples to 50 Hz |
+| `validation/pipeline.py` | Python reference implementation of the phase–memory operator (PAPER.md §3–4) |
+| `validation/metrics.py` | Detection latency, false alarm rate, RMS envelope, FFT peak shift (§5.2–5.3) |
+| `validation/plots.py` | Generates the three regime figures and the baseline comparison figure |
+| `validation/validate_bidmc.py` | End-to-end orchestration script |
+
+### Validation protocol (PAPER.md §5)
+
+The script applies **semi-synthetic perturbations** to a real BIDMC respiratory
+signal to produce the three controlled regimes:
+
+1. **Stable segment** — first 30 s of the real signal (no perturbation)
+2. **Drift segment** — time-axis compression after t = 30 s simulates rising
+   respiratory rate (frequency drift)
+3. **Pause segment** — amplitude zeroed to ≈ 3 % for 8 s after t = 30 s
+   simulates an intermittent breathing pause
+
+This follows the "semi-real validation" path described in PAPER.md §5.1 —
+real signal morphology is preserved in the stable portion; controlled
+perturbations are applied only to isolate specific instability regimes.
+
+> **Scientific reference.** PAPER.md is the canonical description of the
+> operator, validation protocol, and baseline comparisons.
+
+---
+
+## Data Sources & Citations
+
+If you use the PhysioNet BIDMC dataset in work that builds on this repository,
+please cite both the dataset paper and the PhysioNet platform:
+
+**BIDMC dataset**
+
+> M. A. F. Pimentel, A. E. W. Johnson, P. H. Charlton, D. Birrenkott,
+> P. J. Watkinson, L. Tarassenko, and D. A. Clifton,
+> "Towards a Robust Estimation of Respiratory Rate from Pulse Oximeters,"
+> *IEEE Trans. Biomed. Eng.*, vol. 64, no. 8, pp. 1914–1923, 2016.
+> DOI: [10.1109/TBME.2016.2613124](https://doi.org/10.1109/TBME.2016.2613124)
+
+```bibtex
+@article{pimentel2016bidmc,
+  author  = {Pimentel, Marco A. F. and Johnson, Alistair E. W. and
+             Charlton, Peter H. and Birrenkott, Drew and Watkinson,
+             Peter J. and Tarassenko, Lionel and Clifton, David A.},
+  title   = {Towards a Robust Estimation of Respiratory Rate from
+             Pulse Oximeters},
+  journal = {IEEE Transactions on Biomedical Engineering},
+  volume  = {64},
+  number  = {8},
+  pages   = {1914--1923},
+  year    = {2016},
+  doi     = {10.1109/TBME.2016.2613124}
+}
+```
+
+**PhysioNet platform**
+
+> A. L. Goldberger, L. A. N. Amaral, L. Glass, J. M. Hausdorff,
+> P. Ch. Ivanov, R. G. Mark, J. E. Mietus, G. B. Moody, C.-K. Peng,
+> and H. E. Stanley,
+> "PhysioBank, PhysioToolkit, and PhysioNet: Components of a New
+> Research Resource for Complex Physiologic Signals,"
+> *Circulation*, vol. 101, no. 23, pp. e215–e220, 2000.
+> DOI: [10.1161/01.CIR.101.23.e215](https://doi.org/10.1161/01.CIR.101.23.e215)
+
+```bibtex
+@article{goldberger2000physionet,
+  author  = {Goldberger, Ary L. and Amaral, Luis A. N. and Glass, Leon
+             and Hausdorff, Jeffrey M. and Ivanov, Plamen Ch. and
+             Mark, Roger G. and Mietus, Joseph E. and Moody, George B.
+             and Peng, Chung-Kang and Stanley, H. Eugene},
+  title   = {{PhysioBank}, {PhysioToolkit}, and {PhysioNet}: Components
+             of a New Research Resource for Complex Physiologic Signals},
+  journal = {Circulation},
+  volume  = {101},
+  number  = {23},
+  pages   = {e215--e220},
+  year    = {2000},
+  doi     = {10.1161/01.CIR.101.23.e215}
+}
+```
+
+The BIDMC dataset is made available under the
+[Open Data Commons Attribution License (ODC-By) v1.0](https://physionet.org/content/bidmc/1.0.0/).
+Access it at: https://physionet.org/content/bidmc/1.0.0/
 
 ---
 
