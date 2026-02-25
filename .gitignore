@@ -5,9 +5,10 @@
 *.dylib
 *.dll
 
-# Test binaries
+# Test binaries (compiled C++ executables)
 tests/test_core
 tests/test_*
+!tests/test_*.py
 
 # IDE files
 .vscode/
