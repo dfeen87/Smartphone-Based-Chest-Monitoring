@@ -13,7 +13,7 @@ services:
     # Install only the server dependencies (Flask, NumPy, SciPy).
     # The validation pipeline modules are imported directly from the
     # repo checkout — no separate package installation needed.
-    buildCommand: pip install -r server/requirements.txt
+    buildCommand: pip install -r requirements.txt
 
     # ── Start command ────────────────────────────────────────────────
     # Render sets the PORT environment variable automatically.
