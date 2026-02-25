@@ -36,3 +36,21 @@ services:
         value: "3.11.0"
       - key: FLASK_ENV
         value: production
+      # ── JWT authentication ──────────────────────────────────────────
+      # Set these three variables in the Render dashboard to enable
+      # Bearer-token authentication on all /api/* endpoints.
+      #
+      # JWT_SECRET_KEY  — long random string used to sign tokens; keep secret.
+      # API_USERNAME    — username accepted by POST /api/auth/token.
+      # API_PASSWORD    — password accepted by POST /api/auth/token; keep secret.
+      # JWT_EXPIRES_IN  — token lifetime in seconds (default 3600 = 1 hour).
+      #
+      # Example (generate a key with: python -c "import secrets; print(secrets.token_hex(32))"):
+      #   - key: JWT_SECRET_KEY
+      #     sync: false          # mark as secret so Render never shows the value
+      #   - key: API_USERNAME
+      #     value: "admin"
+      #   - key: API_PASSWORD
+      #     sync: false
+      #   - key: JWT_EXPIRES_IN
+      #     value: "3600"

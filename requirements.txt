@@ -3,5 +3,6 @@ flask>=2.3
 numpy>=1.21
 scipy>=1.7
 gunicorn[gevent]
+PyJWT>=2.4
 # matplotlib is optional (used only by validate_bidmc.py, not the server)
 # wfdb is optional (needed only for live PhysioNet downloads)

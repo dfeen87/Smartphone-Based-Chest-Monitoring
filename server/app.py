@@ -6,12 +6,35 @@ dashboard UI for the RespiroSync phase–memory operator.
 
 Endpoints
 ---------
-  GET  /              → dashboard UI (server/static/index.html)
-  GET  /api/status    → system status (uptime, version)
-  GET  /api/logs      → recent structured log entries (?n=50)
-  GET  /api/config    → current operator configuration
-  POST /api/config    → update operator configuration
-  POST /api/run       → run the phase–memory operator on synthetic data
+  GET  /                  → dashboard UI (server/static/index.html)
+  GET  /ping              → keepalive probe (no auth required)
+  POST /api/auth/token    → obtain a signed JWT access token
+  GET  /api/status        → system status (uptime, version)
+  GET  /api/logs          → recent structured log entries (?n=50)
+  GET  /api/config        → current operator configuration
+  POST /api/config        → update operator configuration
+  POST /api/run           → run the phase–memory operator on synthetic data
+
+Authentication
+--------------
+All /api/* endpoints (except /api/auth/token) require a Bearer JWT in the
+Authorization header::
+
+    Authorization: Bearer <token>
+
+Obtain a token via POST /api/auth/token with JSON body::
+
+    {"username": "...", "password": "..."}
+
+Required environment variables
+-------------------------------
+JWT_SECRET_KEY  – secret used to sign tokens (required for auth to be active)
+API_USERNAME    – valid username (default: "admin")
+API_PASSWORD    – valid password (required; no default for security)
+JWT_EXPIRES_IN  – token lifetime in seconds (default: 3600)
+
+If JWT_SECRET_KEY is not set the server starts without authentication so that
+existing deployments are not broken by the upgrade.
 
 All log output goes to stdout so that Render.com captures it in the
 service dashboard without any extra configuration.
@@ -25,8 +48,11 @@ import logging
 import threading
 import time
 from collections import deque
+from datetime import datetime, timezone, timedelta
+from functools import wraps
 from pathlib import Path
 
+import jwt
 from flask import Flask, jsonify, request, send_from_directory
 
 # ── Import the validation pipeline (validation/ lives at the repo root) ────────
@@ -83,6 +109,60 @@ app = Flask(__name__, static_folder="static")
 
 _start_time = time.time()
 
+# ── JWT configuration ───────────────────────────────────────────────────────────
+# Authentication is only enforced when JWT_SECRET_KEY is set in the environment.
+# This preserves backward compatibility for deployments that have not yet
+# configured auth credentials.
+
+_JWT_SECRET    = os.environ.get("JWT_SECRET_KEY", "")
+_API_USERNAME  = os.environ.get("API_USERNAME", "admin")
+_API_PASSWORD  = os.environ.get("API_PASSWORD", "")
+_JWT_EXPIRES   = int(os.environ.get("JWT_EXPIRES_IN", 3600))  # seconds
+
+_AUTH_ENABLED = bool(_JWT_SECRET)
+
+if _AUTH_ENABLED:
+    logger.info("JWT authentication enabled (token lifetime: %ds)", _JWT_EXPIRES)
+else:
+    logger.warning(
+        "JWT_SECRET_KEY is not set — API is running WITHOUT authentication. "
+        "Set JWT_SECRET_KEY, API_USERNAME and API_PASSWORD to enable auth."
+    )
+
+
+def _make_token() -> str:
+    """Return a signed JWT valid for _JWT_EXPIRES seconds."""
+    now = datetime.now(tz=timezone.utc)
+    payload = {
+        "iat": now,
+        "exp": now + timedelta(seconds=_JWT_EXPIRES),
+    }
+    return jwt.encode(payload, _JWT_SECRET, algorithm="HS256")
+
+
+def require_jwt(f):
+    """Decorator that enforces Bearer-token JWT auth when auth is enabled."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not _AUTH_ENABLED:
+            return f(*args, **kwargs)
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "Missing or invalid Authorization header"}), 401
+
+        token = auth_header[len("Bearer "):]
+        try:
+            jwt.decode(token, _JWT_SECRET, algorithms=["HS256"])
+        except jwt.ExpiredSignatureError:
+            return jsonify({"error": "Token has expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"error": "Invalid token"}), 401
+
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ── Operator configuration (mutable at runtime via /api/config) ────────────────
 _config: dict = {
     "memory_samples":   DEFAULT_MEMORY_SAMPLES,  # M  — rolling window (Eq. 4)
@@ -104,7 +184,48 @@ def index() -> object:
     return send_from_directory(app.static_folder, "index.html")
 
 
+@app.route("/ping")
+def ping() -> object:
+    """Lightweight keepalive probe — no authentication required.
+
+    Designed to be called by uptime monitors (e.g. UptimeRobot, Freshping)
+    so that the Render.com free-tier service does not spin down between real
+    requests.  The response body is intentionally minimal to minimise latency.
+    """
+    return jsonify({"ok": True})
+
+
+@app.route("/api/auth/token", methods=["POST"])
+def api_auth_token() -> object:
+    """Issue a signed JWT access token.
+
+    Request body (JSON)
+    -------------------
+    username : str
+    password : str
+
+    Response (200)
+    --------------
+    {"token": "<jwt>", "expires_in": <seconds>}
+    """
+    if not _AUTH_ENABLED:
+        return jsonify({"error": "Authentication is not configured on this server"}), 501
+
+    body = request.get_json(force=True, silent=True) or {}
+    username = body.get("username", "")
+    password = body.get("password", "")
+
+    if username != _API_USERNAME or password != _API_PASSWORD:
+        logger.warning("Failed login attempt for user %r", username)
+        return jsonify({"error": "Invalid credentials"}), 401
+
+    token = _make_token()
+    logger.info("JWT issued for user %r (expires in %ds)", username, _JWT_EXPIRES)
+    return jsonify({"token": token, "expires_in": _JWT_EXPIRES})
+
+
 @app.route("/api/status")
+@require_jwt
 def api_status() -> object:
     """Return current system status."""
     return jsonify({
@@ -116,6 +237,7 @@ def api_status() -> object:
 
 
 @app.route("/api/logs")
+@require_jwt
 def api_logs() -> object:
     """Return recent log entries.
 
@@ -131,12 +253,14 @@ def api_logs() -> object:
 
 
 @app.route("/api/config", methods=["GET"])
+@require_jwt
 def api_get_config() -> object:
     """Return the current operator configuration."""
     return jsonify(dict(_config))
 
 
 @app.route("/api/config", methods=["POST"])
+@require_jwt
 def api_set_config() -> object:
     """Update operator configuration parameters.
 
@@ -167,6 +291,7 @@ def api_set_config() -> object:
 
 
 @app.route("/api/run", methods=["POST"])
+@require_jwt
 def api_run() -> object:
     """Run the phase–memory operator on a synthetic respiratory signal.
 
