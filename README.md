@@ -31,6 +31,7 @@
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
 - [Building](#building)
+- [Render.com Deployment](#rendercom-deployment)
 - [Reproducibility Layer](#reproducibility-layer)
 - [Validation Protocol](#validation-protocol)
 - [PhysioNet / Real-Data Validation](#physionet--real-data-validation)
@@ -272,6 +273,97 @@ target_link_libraries(respirosync android log)
 ```
 
 For comprehensive build instructions see [`docs/BUILDING.md`](docs/BUILDING.md).
+
+---
+
+## Render.com Deployment
+
+The `server/` directory provides a lightweight Flask dashboard that exposes the
+phase–memory operator (PAPER.md §3–4) via a REST API and a browser UI.
+
+### What the server provides
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Dashboard UI — status, metrics, configuration, live logs |
+| `GET /api/status` | System status (version, uptime, pipeline name) |
+| `GET /api/logs?n=50` | Last *n* structured log entries |
+| `GET /api/config` | Current operator parameters (M, α, baseline, fs) |
+| `POST /api/config` | Update operator parameters at runtime |
+| `POST /api/run` | Run the operator on a synthetic signal and return metrics |
+
+### Deploy to Render.com (one-click)
+
+1. Fork or push this repository to GitHub.
+2. Sign in at [render.com](https://render.com) → **New → Web Service**.
+3. Connect the repository and select **"Use render.yaml"** — Render will read
+   [`render.yaml`](render.yaml) automatically.
+4. Click **Deploy**. Render will:
+   - run `pip install -r server/requirements.txt`
+   - start `python server/app.py` bound to the `$PORT` it provides
+
+> The service is defined in [`render.yaml`](render.yaml) with
+> `healthCheckPath: /api/status` so Render can verify liveness automatically.
+
+### Environment variables
+
+All variables can be set in the Render dashboard under
+**Environment → Environment Variables**.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | (set by Render) | Port the Flask server listens on |
+| `FLASK_ENV` | `production` | Set to `development` for debug mode locally |
+| `PYTHON_VERSION` | `3.11.0` | Python runtime version |
+
+No secrets are required for the default synthetic-data mode.
+
+### Accessing the dashboard
+
+After deployment the dashboard is available at your Render service URL, e.g.:
+
+```
+https://respirosync-dashboard.onrender.com/
+```
+
+- **Configuration** — adjust M, α, baseline window, and fs in the form and
+  click **Apply** to update the running operator parameters.
+- **Run Operator** — click **▶ Run Operator** to execute the phase–memory
+  pipeline on a synthetic respiratory signal and view the output metrics
+  (ΔΦ max/mean, σ_ω, instability rate, alarm count).
+
+### Viewing logs
+
+All server output is written to **stdout** using Python's `logging` module with
+structured `[LEVEL]` prefixes.  Render captures stdout automatically; logs are
+visible in the Render dashboard under **Logs** for the web service.
+
+The dashboard also exposes `GET /api/logs?n=50` which returns the last *n* log
+entries as JSON and is polled every 5 seconds by the browser UI.
+
+### Running locally
+
+```bash
+pip install -r server/requirements.txt
+python server/app.py          # listens on http://localhost:5000
+# or with a custom port:
+PORT=8080 python server/app.py
+```
+
+### Relationship to PAPER.md
+
+The server wraps the Python reference implementation of the phase–memory
+operator from `validation/pipeline.py` — the same equations described in
+PAPER.md §3–4:
+
+```
+detrend → bandpass → Hilbert → θ(t) → ω(t) → ω̄(t) → ΔΦ(t) > α·σ_ω
+```
+
+The tunable parameters exposed in the dashboard (M, α, baseline window, fs)
+correspond directly to the operator parameters defined in PAPER.md §4.2 and §8.
+No scientific logic is modified; the server only adds HTTP routing, structured
+logging, and a browser interface.
 
 ---
 

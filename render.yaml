@@ -1,0 +1,38 @@
+# render.yaml — RespiroSync Render.com deployment
+# Deploy the phase–memory operator dashboard as a web service.
+# Docs: https://render.com/docs/infrastructure-as-code
+
+services:
+  - type: web
+    name: respirosync-dashboard
+    runtime: python
+    region: oregon        # Render free-tier region; change to suit your latency needs
+    plan: free            # Use "starter" or higher for production
+
+    # ── Build step ──────────────────────────────────────────────────
+    # Install only the server dependencies (Flask, NumPy, SciPy).
+    # The validation pipeline modules are imported directly from the
+    # repo checkout — no separate package installation needed.
+    buildCommand: pip install -r server/requirements.txt
+
+    # ── Start command ────────────────────────────────────────────────
+    # Render sets the PORT environment variable automatically.
+    # The Flask app reads PORT via os.environ.get("PORT", 5000).
+    startCommand: python server/app.py
+
+    # ── Health check ─────────────────────────────────────────────────
+    # Render pings this path to verify the service is live.
+    healthCheckPath: /api/status
+
+    # ── Auto-deploy ──────────────────────────────────────────────────
+    autoDeploy: true
+
+    # ── Environment variables ────────────────────────────────────────
+    # PORT is injected automatically by Render.
+    # Add any secrets (API keys, etc.) in the Render dashboard UI
+    # under Environment → Secret Files or as "Secret" env vars.
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: FLASK_ENV
+        value: production
