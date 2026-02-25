@@ -278,3 +278,42 @@ def test_api_send_results_missing_email(client, auth_headers):
 def test_api_send_results_invalid_email(client, auth_headers):
     rv = client.post("/api/send-results", json={"email": "notvalid"}, headers=auth_headers)
     assert rv.status_code == 400
+
+
+# ── /api/metrics ─────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def clear_metrics():
+    """Ensure _last_metrics is empty for the duration of the test, then restore."""
+    from server import app as app_module
+    saved = dict(app_module._last_metrics)
+    app_module._last_metrics.clear()
+    yield
+    app_module._last_metrics.clear()
+    app_module._last_metrics.update(saved)
+
+
+def test_api_metrics_requires_jwt(client):
+    rv = client.get("/api/metrics")
+    assert rv.status_code == 401
+
+
+def test_api_metrics_empty_before_run(client, auth_headers, clear_metrics):
+    """Before any run /api/metrics must return an empty object, not an error."""
+    rv = client.get("/api/metrics", headers=auth_headers)
+    assert rv.status_code == 200
+    assert rv.get_json() == {}
+
+
+def test_api_metrics_populated_after_run(client, auth_headers):
+    """After a successful /api/run the metrics endpoint returns the same data."""
+    run_rv = client.post("/api/run", json={"duration_s": 10}, headers=auth_headers)
+    assert run_rv.status_code == 200
+    run_metrics = run_rv.get_json()["metrics"]
+
+    metrics_rv = client.get("/api/metrics", headers=auth_headers)
+    assert metrics_rv.status_code == 200
+    data = metrics_rv.get_json()
+    # All keys from the run response must be present and equal
+    for key in run_metrics:
+        assert data[key] == run_metrics[key]

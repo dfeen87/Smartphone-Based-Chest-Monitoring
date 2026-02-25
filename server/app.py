@@ -13,6 +13,7 @@ Endpoints
   GET  /api/logs          → recent structured log entries (?n=50)    [JWT]
   GET  /api/config        → current operator configuration           [JWT]
   POST /api/config        → update operator configuration            [JWT]
+  GET  /api/metrics       → metrics from the last operator run       [JWT]
   POST /api/run           → run the phase–memory operator            [JWT]
 
 Authentication
@@ -262,6 +263,19 @@ def api_set_config() -> object:
     if updated:
         logger.info("Configuration updated: %s", updated)
     return jsonify({"status": "ok", "config": dict(_config)})
+
+
+@app.route("/api/metrics")
+@require_jwt
+def api_metrics() -> object:
+    """Return the metrics from the most recent operator run.
+
+    Returns an empty object ``{}`` when no run has been performed yet in this
+    server session, allowing the dashboard to distinguish "no data yet" from an
+    error.  This enables newly authenticated users to see existing in-memory
+    results without requiring a database.
+    """
+    return jsonify(dict(_last_metrics))
 
 
 @app.route("/api/run", methods=["POST"])
