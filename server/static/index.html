@@ -686,7 +686,8 @@ async function dlFile(path) {
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
-    // Derive filename from the Content-Disposition header or the path
+    // Derive filename from Content-Disposition header (supports both quoted and
+    // unquoted forms: filename="foo.csv" and filename=foo.csv)
     const cd = res.headers.get("content-disposition") || "";
     const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
     a.download = match ? match[1].replace(/['"]/g, "") : path.split("/").pop();
@@ -704,7 +705,9 @@ async function dlFile(path) {
 async function sendResults() {
   const email = document.getElementById("val-email").value.trim();
   const el = document.getElementById("email-status");
-  if (!email || !email.includes("@")) {
+  // Basic RFC 5322 email check: at least one char before @, a domain, and a TLD
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRe.test(email)) {
     el.textContent = "✗ Enter a valid email address";
     el.style.color = "var(--red)";
     return;

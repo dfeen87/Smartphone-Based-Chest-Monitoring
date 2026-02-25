@@ -203,7 +203,10 @@ def _process_record(record_id: int, use_synthetic: bool = False) -> dict:
 
     signal, fs = data["signal"], float(data["fs"])
 
-    # Ensure minimum duration
+    # Ensure minimum duration by tiling if needed.
+    # NOTE: tiling repeats the signal and may introduce artificial periodicity
+    # artefacts at the seam boundaries.  This only occurs for records shorter
+    # than 90 s, which are rare in BIDMC (all records are ≈ 8 min).
     min_n = int(_MIN_DURATION_S * fs)
     if len(signal) < min_n:
         reps = int(np.ceil(min_n / len(signal)))
@@ -217,7 +220,9 @@ def _process_record(record_id: int, use_synthetic: bool = False) -> dict:
     # 2. Stable segment — false alarm COUNT (PAPER.md §5.3)
     stable_sig = signal[:n_stable]
     result_stable = run_pipeline(stable_sig, fs=fs)
-    # Trim calibration window and Hilbert boundary to get the interior steady-state
+    # Trim the calibration window at the start (σ_ω estimation window) and the
+    # last M samples at the end (Hilbert transform boundary effects) so that
+    # the false alarm rate is measured on the interior steady-state portion only.
     dp_interior = result_stable["delta_phi"][DEFAULT_BASELINE_SAMP:-DEFAULT_MEMORY_SAMPLES]
     threshold_stable = result_stable["threshold"]
     above_stable = dp_interior > threshold_stable

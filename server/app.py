@@ -493,7 +493,9 @@ def api_validate() -> object:
 
     try:
         body = request.get_json(force=True, silent=True) or {}
-        n_records = max(1, int(body.get("n_records", 5)))
+        n_records = int(body.get("n_records", 5))
+        if n_records < 1 or n_records > 53:
+            return jsonify({"error": "n_records must be between 1 and 53 (BIDMC dataset size)"}), 400
         use_synthetic = bool(body.get("synthetic", True))
 
         logger.info(
@@ -676,14 +678,22 @@ def api_send_results() -> object:
     smtp_pass = os.environ.get("SMTP_PASS", "")
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-            server.ehlo()
-            if smtp_port != 25:
-                server.starttls()
+        if smtp_port == 465:
+            # Port 465 uses implicit SSL (SMTPS) — cannot use STARTTLS
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as server:
                 server.ehlo()
-            if smtp_user:
-                server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_from, [recipient], msg.as_string())
+                if smtp_user:
+                    server.login(smtp_user, smtp_pass)
+                server.sendmail(smtp_from, [recipient], msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+                server.ehlo()
+                if smtp_port != 25:
+                    server.starttls()
+                    server.ehlo()
+                if smtp_user:
+                    server.login(smtp_user, smtp_pass)
+                server.sendmail(smtp_from, [recipient], msg.as_string())
         logger.info("Validation results emailed to %s", recipient)
         return jsonify({"status": "ok", "sent_to": recipient})
     except Exception as exc:  # pylint: disable=broad-except

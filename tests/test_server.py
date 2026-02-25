@@ -167,6 +167,16 @@ def test_api_validate_with_valid_jwt(client, auth_headers):
         assert "std" in stats[key]
 
 
+def test_api_validate_n_records_too_large(client, auth_headers):
+    rv = client.post(
+        "/api/validate",
+        json={"n_records": 54, "synthetic": True},
+        headers=auth_headers,
+    )
+    assert rv.status_code == 400
+    assert "error" in rv.get_json()
+
+
 def test_api_validate_methods_statement(client, auth_headers):
     rv = client.post(
         "/api/validate",
