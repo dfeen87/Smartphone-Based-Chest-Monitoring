@@ -1,8 +1,7 @@
 <div align="center">
 <a name="top"></a>
 
-# RespiroSync
-### Chest-Based Respiratory Monitoring System
+# Smartphone Based Chest Monitoring
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/dfeen87/RespiroSync-Chest-Based-Respiratory-Monitoring-System)
