@@ -22,7 +22,9 @@ services:
 
     # ── Health check ─────────────────────────────────────────────────
     # Render pings this path to verify the service is live.
-    healthCheckPath: /api/status
+    # /ping is unauthenticated; /api/status requires a JWT so it would
+    # always return 401 and cause Render to mark the service as unhealthy.
+    healthCheckPath: /ping
 
     # ── Auto-deploy ──────────────────────────────────────────────────
     autoDeploy: true
