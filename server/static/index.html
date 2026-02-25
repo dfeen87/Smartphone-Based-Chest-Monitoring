@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RespiroSync — Dashboard</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --border:   #2a2d3e;
+      --accent:   #4f8ef7;
+      --green:    #3ecf8e;
+      --yellow:   #f5a623;
+      --red:      #e05252;
+      --text:     #e2e8f0;
+      --muted:    #8892a4;
+      --mono:     "Fira Mono", "Courier New", monospace;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: .02em; }
+    header .subtitle { color: var(--muted); font-size: .8rem; }
+    .status-badge {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .75rem;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    .dot.online  { background: var(--green); }
+    .dot.offline { background: var(--red); }
+
+    main {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 16px;
+      padding: 16px 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* ── Card ──────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .card h2 {
+      font-size: .75rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── System status ─────────────────────────────────────────────── */
+    #status-card { grid-column: 1; grid-row: 1; }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .stat {
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .stat .label { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; }
+    .stat .value { font-size: 1.1rem; font-weight: 700; margin-top: 2px; }
+
+    /* ── Config form ────────────────────────────────────────────────── */
+    #config-card { grid-column: 1; grid-row: 2; }
+    .form-group { margin-bottom: 10px; }
+    .form-group label {
+      display: block;
+      font-size: .75rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .form-group input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 6px 10px;
+      font-size: .85rem;
+      font-family: var(--mono);
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .hint { font-size: .7rem; color: var(--muted); margin-top: 2px; }
+
+    /* ── Buttons ───────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      border-radius: 5px;
+      padding: 8px 16px;
+      font-size: .8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary  { background: var(--accent); color: #fff; }
+    .btn-secondary{ background: var(--border); color: var(--text); }
+    .btn:not(:disabled):hover { opacity: .85; }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+
+    /* ── Metrics panel ─────────────────────────────────────────────── */
+    #metrics-card { grid-column: 2; grid-row: 1; }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+    }
+    .metric {
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .metric .mlabel { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+    .metric .mvalue { font-size: 1.3rem; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
+    .metric .munits { font-size: .65rem; color: var(--muted); }
+
+    /* ── Log panel ─────────────────────────────────────────────────── */
+    #log-card { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; }
+    #log-output {
+      flex: 1;
+      background: var(--bg);
+      border-radius: 5px;
+      padding: 10px;
+      font-family: var(--mono);
+      font-size: .72rem;
+      line-height: 1.5;
+      overflow-y: auto;
+      max-height: 280px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-line { padding: 1px 0; }
+    .log-line.INFO    { color: #a8d8a8; }
+    .log-line.WARNING { color: var(--yellow); }
+    .log-line.ERROR   { color: var(--red); }
+    .log-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .log-controls label { font-size: .75rem; color: var(--muted); }
+    #log-n {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 3px 7px;
+      font-size: .75rem;
+      width: 60px;
+    }
+
+    /* ── Run spinner ────────────────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    #run-status { font-size: .75rem; color: var(--muted); margin-top: 6px; min-height: 1.2em; }
+
+    /* ── Responsive ─────────────────────────────────────────────────── */
+    @media (max-width: 700px) {
+      main { grid-template-columns: 1fr; }
+      #metrics-card, #log-card { grid-column: 1; }
+      #metrics-card { grid-row: 2; }
+      #log-card     { grid-row: 4; }
+      #config-card  { grid-row: 3; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>RespiroSync™</h1>
+    <div class="subtitle">Phase–Memory Operator · Respiratory Instability Detection</div>
+  </div>
+  <div class="status-badge">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">Connecting…</span>
+    <span style="color:var(--muted);margin-left:6px" id="uptime-text"></span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── System status ──────────────────────────────────────────── -->
+  <div class="card" id="status-card">
+    <h2>System Status</h2>
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="label">Status</div>
+        <div class="value" id="st-status" style="color:var(--green)">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Version</div>
+        <div class="value" id="st-version">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Uptime</div>
+        <div class="value" id="st-uptime">—</div>
+      </div>
+      <div class="stat">
+        <div class="label">Pipeline</div>
+        <div class="value" style="font-size:.75rem;line-height:1.3" id="st-pipeline">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Metrics ───────────────────────────────────────────────── -->
+  <div class="card" id="metrics-card">
+    <h2>Operator Output Metrics  <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.7rem">(last run)</span></h2>
+    <div class="metric-grid">
+      <div class="metric">
+        <div class="mlabel">σ_ω  baseline</div>
+        <div class="mvalue" id="m-sigma">—</div>
+        <div class="munits">rad/s</div>
+      </div>
+      <div class="metric">
+        <div class="mlabel">α·σ_ω threshold</div>
+        <div class="mvalue" id="m-threshold">—</div>
+        <div class="munits">rad/s</div>
+      </div>
+      <div class="metric">
+        <div class="mlabel">ΔΦ max</div>
+        <div class="mvalue" id="m-dphi-max">—</div>
+        <div class="munits">rad/s</div>
+      </div>
+      <div class="metric">
+        <div class="mlabel">ΔΦ mean</div>
+        <div class="mvalue" id="m-dphi-mean">—</div>
+        <div class="munits">rad/s</div>
+      </div>
+      <div class="metric">
+        <div class="mlabel">Instability rate</div>
+        <div class="mvalue" id="m-inst-rate">—</div>
+        <div class="munits">% of samples</div>
+      </div>
+      <div class="metric">
+        <div class="mlabel">Alarm count</div>
+        <div class="mvalue" id="m-inst-count">—</div>
+        <div class="munits">samples flagged</div>
+      </div>
+      <div class="metric">
+        <div class="mlabel">Signal length</div>
+        <div class="mvalue" id="m-duration">—</div>
+        <div class="munits">seconds</div>
+      </div>
+      <div class="metric">
+        <div class="mlabel">Samples</div>
+        <div class="mvalue" id="m-samples">—</div>
+        <div class="munits">n</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Configuration ─────────────────────────────────────────── -->
+  <div class="card" id="config-card">
+    <h2>Configuration</h2>
+    <div class="form-group">
+      <label for="cfg-M">Memory window M (samples)  <a href="#" onclick="return false" title="Rolling mean window for ω̄(t) — Eq. 4">ⓘ</a></label>
+      <input type="number" id="cfg-M" min="10" max="1000" step="10" value="150" />
+      <div class="hint">≈ M/fs seconds of phase memory.  Default: 150 (≈3 s at 50 Hz)</div>
+    </div>
+    <div class="form-group">
+      <label for="cfg-alpha">Sensitivity α  <a href="#" onclick="return false" title="Threshold multiplier — Eq. 6.  Recommended range: 2–3">ⓘ</a></label>
+      <input type="number" id="cfg-alpha" min="0.5" max="10" step="0.1" value="2.0" />
+      <div class="hint">Instability when ΔΦ(t) &gt; α·σ_ω.  Default: 2.0</div>
+    </div>
+    <div class="form-group">
+      <label for="cfg-baseline">Baseline window (samples)</label>
+      <input type="number" id="cfg-baseline" min="10" max="2000" step="10" value="250" />
+      <div class="hint">Calibration samples for σ_ω.  Default: 250 (≈5 s)</div>
+    </div>
+    <div class="form-group">
+      <label for="cfg-fs">Sample rate fs (Hz)</label>
+      <input type="number" id="cfg-fs" min="10" max="200" step="5" value="50" />
+      <div class="hint">Sensor sample rate.  Default: 50 Hz (PAPER.md §2.2)</div>
+    </div>
+    <div class="form-group">
+      <label for="cfg-duration">Signal duration for run (s)</label>
+      <input type="number" id="cfg-duration" min="10" max="300" step="5" value="90" />
+      <div class="hint">Length of synthetic test signal.  Includes drift and pause regimes.</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="loadConfig()">↺ Reload</button>
+      <button class="btn btn-primary"   onclick="saveConfig()">✓ Apply</button>
+    </div>
+    <div class="btn-row" style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px">
+      <button class="btn btn-primary" id="run-btn" onclick="runOperator()">▶ Run Operator</button>
+    </div>
+    <div id="run-status"></div>
+  </div>
+
+  <!-- ── Log viewer ─────────────────────────────────────────────── -->
+  <div class="card" id="log-card">
+    <h2>Live Logs</h2>
+    <div class="log-controls">
+      <label for="log-n">Show last</label>
+      <input type="number" id="log-n" value="50" min="5" max="500" />
+      <label>entries</label>
+      <button class="btn btn-secondary" style="padding:3px 10px" onclick="loadLogs()">Refresh</button>
+      <label style="margin-left:auto">
+        <input type="checkbox" id="auto-refresh" checked /> Auto-refresh
+      </label>
+    </div>
+    <div id="log-output"><span style="color:var(--muted)">Loading logs…</span></div>
+  </div>
+
+</main>
+
+<script>
+/* ── Helpers ─────────────────────────────────────────────────────── */
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+function fmt(v, dec = 4) {
+  if (v == null || v === "—") return "—";
+  return typeof v === "number" ? v.toFixed(dec) : v;
+}
+
+function formatUptime(s) {
+  if (s < 60)  return `${Math.round(s)}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m ${Math.round(s%60)}s`;
+  return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+}
+
+/* ── Status ─────────────────────────────────────────────────────── */
+async function loadStatus() {
+  try {
+    const d = await apiFetch("/api/status");
+    document.getElementById("status-dot").className  = "dot online";
+    document.getElementById("status-text").textContent = "Online";
+    document.getElementById("uptime-text").textContent = "up " + formatUptime(d.uptime_s);
+    document.getElementById("st-status").textContent  = d.status;
+    document.getElementById("st-version").textContent = d.version;
+    document.getElementById("st-uptime").textContent  = formatUptime(d.uptime_s);
+    document.getElementById("st-pipeline").textContent = d.pipeline;
+  } catch (e) {
+    document.getElementById("status-dot").className   = "dot offline";
+    document.getElementById("status-text").textContent = "Offline";
+  }
+}
+
+/* ── Config ──────────────────────────────────────────────────────── */
+async function loadConfig() {
+  try {
+    const d = await apiFetch("/api/config");
+    document.getElementById("cfg-M").value        = d.memory_samples;
+    document.getElementById("cfg-alpha").value    = d.alpha;
+    document.getElementById("cfg-baseline").value = d.baseline_samples;
+    document.getElementById("cfg-fs").value       = d.fs;
+  } catch (e) {
+    console.error("loadConfig:", e);
+  }
+}
+
+async function saveConfig() {
+  const payload = {
+    memory_samples:   parseInt(document.getElementById("cfg-M").value),
+    alpha:            parseFloat(document.getElementById("cfg-alpha").value),
+    baseline_samples: parseInt(document.getElementById("cfg-baseline").value),
+    fs:               parseFloat(document.getElementById("cfg-fs").value),
+  };
+  try {
+    await apiFetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    setRunStatus("✓ Configuration saved", "var(--green)");
+  } catch (e) {
+    setRunStatus("✗ Config save failed: " + e.message, "var(--red)");
+  }
+}
+
+/* ── Run operator ─────────────────────────────────────────────────── */
+async function runOperator() {
+  const btn = document.getElementById("run-btn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Running…';
+  setRunStatus("Operator running…", "var(--accent)");
+
+  const duration_s = parseFloat(document.getElementById("cfg-duration").value) || 90;
+  try {
+    // Save config first
+    await saveConfig();
+
+    const d = await apiFetch("/api/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ duration_s }),
+    });
+    const m = d.metrics;
+    document.getElementById("m-sigma").textContent       = fmt(m.sigma_omega,   5);
+    document.getElementById("m-threshold").textContent   = fmt(m.threshold,     5);
+    document.getElementById("m-dphi-max").textContent    = fmt(m.delta_phi_max, 4);
+    document.getElementById("m-dphi-mean").textContent   = fmt(m.delta_phi_mean,4);
+    document.getElementById("m-inst-rate").textContent   = (m.instability_rate * 100).toFixed(2) + "%";
+    document.getElementById("m-inst-count").textContent  = m.instability_count;
+    document.getElementById("m-duration").textContent    = m.duration_s;
+    document.getElementById("m-samples").textContent     = m.n_samples;
+    setRunStatus("✓ Run complete", "var(--green)");
+    loadLogs();
+  } catch (e) {
+    setRunStatus("✗ Run failed: " + e.message, "var(--red)");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "▶ Run Operator";
+  }
+}
+
+function setRunStatus(msg, color) {
+  const el = document.getElementById("run-status");
+  el.textContent = msg;
+  el.style.color = color;
+}
+
+/* ── Logs ────────────────────────────────────────────────────────── */
+async function loadLogs() {
+  const n = parseInt(document.getElementById("log-n").value) || 50;
+  try {
+    const logs = await apiFetch("/api/logs?n=" + n);
+    const out  = document.getElementById("log-output");
+    if (!logs.length) {
+      out.innerHTML = '<span style="color:var(--muted)">No log entries yet.</span>';
+      return;
+    }
+    out.innerHTML = logs.map(l => {
+      const lvl = l.level || "INFO";
+      const cls = ["INFO","WARNING","ERROR"].includes(lvl) ? lvl : "INFO";
+      const msg = (l.ts || "") + " [" + lvl + "] " + (l.msg || "");
+      return `<div class="log-line ${cls}">${escHtml(msg)}</div>`;
+    }).join("");
+    out.scrollTop = out.scrollHeight;
+  } catch (e) {
+    document.getElementById("log-output").innerHTML =
+      `<span style="color:var(--red)">Failed to load logs: ${escHtml(e.message)}</span>`;
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+/* ── Auto-refresh ────────────────────────────────────────────────── */
+let refreshTimer = null;
+
+function scheduleRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (document.getElementById("auto-refresh").checked) {
+    refreshTimer = setInterval(() => {
+      loadStatus();
+      loadLogs();
+    }, 5000);
+  }
+}
+
+document.getElementById("auto-refresh").addEventListener("change", scheduleRefresh);
+
+/* ── Init ────────────────────────────────────────────────────────── */
+loadStatus();
+loadConfig();
+loadLogs();
+scheduleRefresh();
+</script>
+</body>
+</html>
