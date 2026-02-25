@@ -2,9 +2,16 @@
 
 ## Overview
 
-RespiroSync is a cross-platform respiratory and sleep monitoring engine designed to infer breathing patterns from chest-mounted smartphone motion sensors. The system is built around a portable C++ core that performs signal processing and state estimation, with thin platform-specific bindings for Android and iOS.
+RespiroSync is a cross-platform respiratory and sleep monitoring engine designed
+to infer breathing patterns from chest-mounted smartphone motion sensors.  The
+system is built around a portable C++ core that implements the **deterministic
+phase–memory operator** described in:
 
-The project prioritizes architectural clarity, portability, and deterministic behavior over feature breadth or clinical claims.
+> "A Deterministic Phase–Memory Operator for Early Respiratory Instability
+> Detection Using Smartphone-Based Chest Monitoring" — see **PAPER.md**.
+
+The project prioritizes architectural clarity, portability, and deterministic
+behaviour over feature breadth or clinical claims.
 
 ## High-Level Design
 
@@ -26,21 +33,28 @@ RespiroSync is structured into three layers:
 ┌───────────┴─────────────┐
 │ Core Engine (C++)       │
 │ - Signal processing     │
+│ - Phase–memory operator │
 │ - Breath detection      │
 │ - Metric estimation     │
 └─────────────────────────┘
 ```
 
-The C API boundary ensures the core engine can be safely consumed by multiple platforms and languages without exposing implementation details.
+The C API boundary ensures the core engine can be safely consumed by multiple
+platforms and languages without exposing implementation details.
 
 ## Core Engine Responsibilities
 
 The C++ core engine is responsible for:
 
-- Sensor fusion of accelerometer and gyroscope data
-- Isolation of respiratory motion from gross movement
-- Detection of breath cycles
-- Estimation of respiratory rate and regularity
+- Sensor fusion of accelerometer and gyroscope data  (PAPER.md §2.2–2.3)
+- Forming scalar respiration channel x(t)  (PAPER.md Eq. 1)
+- Isolation of respiratory motion via bandpass filtering  (PAPER.md §2.4)
+- Computing the analytic signal and instantaneous phase θ(t)  (PAPER.md §3.1)
+- Computing instantaneous phase velocity ω(t)  (PAPER.md §3.2)
+- Maintaining short-term phase memory ω̄(t)  (PAPER.md §3.3)
+- Computing the instability metric ΔΦ(t) = |ω − ω̄|  (PAPER.md §4.1)
+- Issuing threshold-based instability alarms ΔΦ > α · σ_ω  (PAPER.md §4.2)
+- Legacy peak-detection for respiratory rate estimation
 - Heuristic sleep-stage classification
 - Detection of prolonged breathing pauses (possible apnea)
 
@@ -50,78 +64,83 @@ The engine is stateful and operates continuously on timestamped sensor samples.
 
 ### Accelerometer
 
-- Used to capture chest wall motion
-- Gravity component is removed via a simple high-pass filter
-- Motion magnitude is used for both breathing detection and movement analysis
+- Primary signal source for respiratory motion
+- Gravity component removed via exponential-smoothing high-pass
+- Forms scalar respiration channel x(t) (PAPER.md Eq. 1)
+- Sampling rate fₛ ∈ [50, 100] Hz (PAPER.md §2.2)
 
 ### Gyroscope
 
-- Used to capture rotational motion of the chest
-- Contributes to respiratory motion estimation
+- Captures rotational motion of the chest
+- Used for optional motion-rejection gating (PAPER.md §2.4)
 - Weighted lightly relative to accelerometer data
 
-Both sensors are expected to be sampled at typical mobile device rates (≈50 Hz). Exact units are not enforced by the core and are assumed to be consistent within a session.
+## Signal Processing Pipeline  (PAPER.md §7.1)
 
-## Signal Processing Pipeline
+```
+Chest IMU          Preprocess              Analytic Signal    Phase     Memory    Decision
+(accel / gyro)  →  (detrend + bandpass)  →  (Hilbert approx) → θ(t)  →  ω̄(t)  →  ΔΦ(t) threshold
+```
 
-The core processing pipeline follows these steps:
+### Preprocessing  (PAPER.md §2.4)
 
-### Gravity Removal
+- Gravity removal — exponential-smoothing high-pass on accelerometer magnitude
+- Bandpass filter — 2nd-order Butterworth (≈ 0.1–0.5 Hz passband)
+- Optional gyroscope-based motion gating
 
-- A smoothed gravity estimate is subtracted from accelerometer magnitude
-- Produces a motion signal dominated by chest expansion/contraction
+### Phase–Memory Operator  (PAPER.md §3–4)
 
-### Sensor Fusion
+The deterministic instability operator proceeds as follows:
 
-- Gyroscope magnitude is blended into the motion signal
-- Improves robustness against posture changes
+1. **Analytic signal** (Eq. 2) — Hilbert transform approximated via the
+   derivative method for narrow-band signals:
+   `H[x](t) ≈ −(1/ω₀) · dx/dt`
 
-### Bandpass Filtering
+2. **Instantaneous phase** (§3.1) — `θ(t) = atan2(H[x], x)`
 
-- A 2nd-order Butterworth bandpass filter isolates breathing frequencies
-- Typical passband: ~0.1–0.5 Hz (≈6–30 breaths/min)
+3. **Phase velocity** (Eq. 3) — `ω(t) = Δθ/Δt` with 2π-unwrapping
 
-### Peak Detection
+4. **Phase memory** (Eq. 4) — `ω̄(t) = (1/M) Σ ω[n−k]`
+   (rolling mean, M ≈ 150 samples ≈ 3 s at 50 Hz)
 
-- Breathing peaks are detected using a dynamic threshold
-- Threshold adapts based on recent signal variance
-- Hysteresis prevents double-counting
+5. **Instability metric** (Eq. 5) — `ΔΦ(t) = |ω(t) − ω̄(t)|`
 
-### Breath Cycle Tracking
+6. **Threshold decision** (Eq. 6) — alarm when `ΔΦ(t) > α · σ_ω`
+   where σ_ω is estimated on the initial stable segment; α ∈ [2, 3].
 
-- Valid breath durations are recorded
-- History is truncated to a rolling time window
+### Legacy Peak Detection
+
+- Dynamic-threshold peak detection on the bandpass-filtered signal
+- Used to estimate `breathing_rate_bpm` and `breath_cycles_detected`
+- Runs in parallel with the phase-memory operator
 
 ## Metric Estimation
 
+### instability_score  (ΔΦ, PAPER.md Eq. 5)
+
+Phase–memory divergence in rad/s.  The primary output of the deterministic
+phase–memory operator.  Exposed via `SleepMetrics.instability_score`.
+
+### instability_detected  (PAPER.md Eq. 6)
+
+Boolean: 1 when `ΔΦ(t) > α · σ_ω`.  Exposed via `SleepMetrics.instability_detected`.
+
 ### Respiratory Rate
 
-- Computed from recent breath cycle durations
-- Averaged over a short rolling window
-- Reported in breaths per minute (BPM)
+Computed from recent peak-to-peak breath cycle durations.
+Reported in breaths per minute (BPM).
 
 ### Breathing Regularity
 
-- Based on variability of recent breath durations
-- Expressed as a normalized 0.0–1.0 score
-- Higher values indicate more consistent breathing
+Coefficient of variation of breath durations, normalised to 0.0–1.0.
 
 ### Movement Intensity
 
-- Derived from variance of recent accelerometer magnitude
-- Normalized to a 0.0–1.0 heuristic scale
-- Used for sleep staging and confidence estimation
+Variance of recent accelerometer magnitude, normalised to 0.0–1.0.
 
 ## Sleep Stage Classification
 
-Sleep staging is performed using a rule-based heuristic, not a machine-learning model.
-
-Classification considers:
-
-- Movement intensity
-- Breathing regularity
-
-Current stages:
+Sleep staging uses a rule-based heuristic (not machine learning), classifying:
 
 - AWAKE
 - LIGHT_SLEEP
@@ -129,24 +148,20 @@ Current stages:
 - REM_SLEEP
 - UNKNOWN
 
-The logic is intentionally simple and deterministic, serving as a foundation for future refinement.
-
 ## Apnea Detection
 
-A possible apnea event is flagged when:
+A `possible_apnea` flag is set when no valid breath is detected for >10 s.
+This is heuristic and informational only.
 
-- No valid breath is detected for more than 10 seconds
+## Operator Parameters  (PAPER.md §8)
 
-This flag is heuristic and intended for informational use only.
+All parameters are explicit and auditable:
 
-## Confidence Estimation
-
-A confidence score (0.0–1.0) is computed based on:
-
-- Number of detected breath cycles
-- Signal continuity
-
-Confidence reflects data sufficiency, not clinical certainty.
+| Symbol | Default | Description                                      |
+|--------|---------|--------------------------------------------------|
+| Tₘ / M | 150 samples (≈3 s) | Phase memory window (Eq. 4)        |
+| α      | 2.0     | Threshold sensitivity (Eq. 6)                    |
+| L      | —       | Optional persistence window (Eq. 7)              |
 
 ## Platform Integration
 
@@ -167,7 +182,7 @@ Confidence reflects data sufficiency, not clinical certainty.
 - Not a medical device
 - Not clinically validated
 - Not a diagnostic tool
-- Not a machine-learning system (yet)
+- Not a machine-learning system
 
 These constraints are intentional and preserve clarity and trust at this stage.
 
@@ -179,13 +194,9 @@ As of v1.0.0:
 - Internal C++ implementation may evolve
 - Platform bindings should rely only on the public header
 
-## Future Direction (Non-Binding)
+## Scientific Reference
 
-Potential future work includes:
+The scientific basis for this implementation is described in full in **PAPER.md**,
+which should be treated as the canonical description of the deterministic
+phase–memory operator, validation protocol, and baseline comparisons.
 
-- Formal API for generic respiratory signals
-- Improved filtering and peak detection
-- Machine-learning-based sleep staging
-- Extended metrics and validation tooling
-
-These are not part of the current contract.
