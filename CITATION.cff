@@ -1,0 +1,335 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software or build on the methods described in the associated
+  paper, please cite both the software and the paper using the metadata below.
+
+title: >-
+  RespiroSync: Smartphone-Based Chest Monitoring via a Deterministic
+  Phase–Memory Operator
+
+version: 1.0.0
+date-released: "2025-12-15"
+license: MIT
+repository-code: https://github.com/dfeen87/Smartphone-Based-Chest-Monitoring
+
+authors:
+  - family-names: Feeney Jr.
+    given-names: Don Michael
+    email: dfeen87@gmail.com
+    orcid: https://orcid.org/0009-0003-1350-4160
+    affiliation: Independent Researcher, USA
+  - family-names: Krüger
+    given-names: Marcel
+    email: marcelkrueger092@gmail.com
+    orcid: https://orcid.org/0009-0002-5709-9729
+    affiliation: Independent Researcher, Germany
+
+contact:
+  - family-names: Krüger
+    given-names: Marcel
+    email: marcelkrueger092@gmail.com
+  - family-names: Feeney Jr.
+    given-names: Don Michael
+    email: dfeen87@gmail.com
+
+abstract: >-
+  RespiroSync is a portable, on-device engine for estimating respiratory
+  patterns and detecting respiratory instability using only a smartphone's
+  built-in accelerometer and gyroscope. The core algorithm is a deterministic
+  phase–memory operator that quantifies instantaneous phase deviation from
+  short-term phase memory (ΔΦ(t)), enabling transparent threshold-based
+  instability detection without machine-learning training. The engine is
+  streaming-capable, linear-time, and cross-platform (Android and iOS via a
+  shared C++ core).
+
+keywords:
+  - respiratory monitoring
+  - smartphone
+  - chest-mounted
+  - inertial measurement unit
+  - phase memory
+  - instability detection
+  - wearable
+  - deterministic signal processing
+  - sleep monitoring
+
+preferred-citation:
+  type: article
+  title: >-
+    A Deterministic Phase–Memory Operator for Early Respiratory Instability
+    Detection Using Smartphone-Based Chest Monitoring
+  authors:
+    - family-names: Krüger
+      given-names: Marcel
+      email: marcelkrueger092@gmail.com
+      orcid: https://orcid.org/0009-0002-5709-9729
+      affiliation: Independent Researcher, Germany
+    - family-names: Feeney Jr.
+      given-names: Don Michael
+      email: dfeen87@gmail.com
+      orcid: https://orcid.org/0009-0003-1350-4160
+      affiliation: Independent Researcher, USA
+  journal: Smart Wearable Technology
+  year: 2025
+  notes: >-
+    Corresponding author: marcelkrueger092@gmail.com (M.K.);
+    dfeen87@gmail.com (D.M.F.)
+
+references:
+  - type: article
+    authors:
+      - family-names: Boashash
+        given-names: B.
+    title: >-
+      Estimating and interpreting the instantaneous frequency of a signal
+    journal: Proceedings of the IEEE
+    volume: 80
+    pages: "520–538"
+    year: 1992
+
+  - type: book
+    authors:
+      - family-names: Cohen
+        given-names: L.
+    title: Time-Frequency Analysis
+    publisher: Prentice Hall
+    year: 1995
+
+  - type: article
+    authors:
+      - family-names: Bland
+        given-names: J. M.
+      - family-names: Altman
+        given-names: D. G.
+    title: >-
+      Statistical methods for assessing agreement between two methods of
+      clinical measurement
+    journal: The Lancet
+    volume: 327
+    issue: 8476
+    pages: "307–310"
+    year: 1986
+
+  - type: article
+    authors:
+      - family-names: Welch
+        given-names: P.
+    title: >-
+      The use of fast Fourier transform for the estimation of power spectra
+    journal: "IEEE Transactions on Audio and Electroacoustics"
+    volume: 15
+    pages: "70–73"
+    year: 1967
+
+  - type: article
+    authors:
+      - family-names: Charlton
+        given-names: P. H.
+      - name: et al.
+    title: >-
+      Breathing rate estimation from physiological signals: a review
+    journal: Physiological Measurement
+    volume: 37
+    year: 2016
+
+  - type: article
+    authors:
+      - family-names: Massaroni
+        given-names: C.
+      - name: et al.
+    title: >-
+      Contact-based methods for measuring respiratory rate: a review
+    journal: Sensors
+    volume: 19
+    year: 2019
+
+  - type: generic
+    authors:
+      - family-names: Karlen
+        given-names: W.
+      - name: et al.
+    title: "Respiratory rate monitoring: methods and clinical perspectives"
+    year: 2013
+
+  - type: article
+    authors:
+      - family-names: Khan
+        given-names: S.
+      - name: et al.
+    title: >-
+      Smartphone-based respiratory monitoring: opportunities and challenges
+    journal: IEEE Access
+    year: 2021
+
+  - type: article
+    authors:
+      - family-names: Kim
+        given-names: J.
+      - name: et al.
+    title: >-
+      Mobile health respiratory monitoring and validation considerations
+    journal: JMIR mHealth and uHealth
+    year: 2021
+
+  - type: article
+    authors:
+      - family-names: Coyle
+        given-names: S.
+      - name: et al.
+    title: >-
+      Real-time wearable signal processing for health monitoring: considerations
+      and pitfalls
+    journal: "IEEE Journal of Biomedical and Health Informatics"
+    year: 2021
+
+  - type: article
+    authors:
+      - family-names: Smets
+        given-names: E.
+      - name: et al.
+    title: >-
+      Large-scale wearable physiological monitoring evaluation/validation
+      considerations
+    journal: Nature Medicine
+    year: 2021
+
+  - type: generic
+    authors:
+      - family-names: Benatti
+        given-names: S.
+      - name: et al.
+    title: "Energy-efficient wearable computing for continuous sensing"
+    year: 2021
+
+  - type: article
+    authors:
+      - family-names: Zhao
+        given-names: C.
+      - name: et al.
+    title: >-
+      Recent advances in fiber optic sensors for respiratory monitoring
+    journal: Biosensors and Bioelectronics
+    year: 2022
+
+  - type: article
+    authors:
+      - family-names: Stankoski
+        given-names: S.
+      - name: et al.
+    title: >-
+      Breathing rate estimation from head-worn inertial sensors
+    journal: Sensors
+    volume: 22
+    issue: 6
+    pages: "2079"
+    year: 2022
+
+  - type: article
+    authors:
+      - family-names: Liu
+        given-names: H.
+      - name: et al.
+    title: >-
+      Wearable respiration monitoring: sensors, systems, and algorithms (review)
+    journal: Biosensors
+    year: 2022
+
+  - type: article
+    authors:
+      - family-names: Nemati
+        given-names: S.
+      - name: et al.
+    title: >-
+      Wearable sensing and digital biomarkers in clinical monitoring
+    journal: npj Digital Medicine
+    year: 2022
+
+  - type: generic
+    authors:
+      - family-names: Roy
+        given-names: S.
+      - name: et al.
+    title: >-
+      Explainable pipelines for wearable health monitoring: a survey
+    year: 2023
+
+  - type: article
+    authors:
+      - family-names: Brown
+        given-names: D.
+      - name: et al.
+    title: >-
+      Digital biomarkers in respiratory disease and remote monitoring
+    journal: The Lancet Digital Health
+    year: 2023
+
+  - type: article
+    authors:
+      - family-names: Assael
+        given-names: H.
+      - name: et al.
+    title: >-
+      RespEar: an ear-worn system for respiration monitoring
+    journal: "Proceedings of the ACM on Interactive, Mobile, Wearable and Ubiquitous Technologies (IMWUT)"
+    year: 2023
+
+  - type: generic
+    authors:
+      - name: et al.
+    title: >-
+      Smartphone IMU-based respiratory monitoring under motion: evaluation study
+    year: 2023
+
+  - type: generic
+    authors:
+      - name: et al.
+    title: "Explainability and auditability in wearable sensing for health"
+    year: 2024
+
+  - type: generic
+    authors:
+      - family-names: Peng
+        given-names: Z.
+      - name: et al.
+    title: >-
+      Phase-based analysis methods for biomedical time series: applications and
+      pitfalls
+    year: 2022
+
+  - type: generic
+    authors:
+      - family-names: Xu
+        given-names: J.
+      - name: et al.
+    title: >-
+      Low-power on-device physiological inference on mobile hardware
+    year: 2022
+
+  - type: generic
+    authors:
+      - name: et al.
+    title: "Wearable respiratory monitoring: 2024 update and benchmarking"
+    year: 2024
+
+  - type: generic
+    authors:
+      - family-names: Clifford
+        given-names: G. D.
+      - name: et al.
+    title: >-
+      PhysioNet: updates and perspectives for physiologic signal research
+    year: 2022
+
+  - type: generic
+    authors:
+      - name: et al.
+    title: >-
+      Best practices for reproducible mobile health signal processing
+    year: 2021
+
+  - type: generic
+    authors:
+      - name: et al.
+    title: >-
+      REST interfaces and reproducibility layers for mHealth experiments
+    year: 2023

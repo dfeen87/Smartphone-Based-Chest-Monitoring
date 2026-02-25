@@ -37,18 +37,25 @@ data class SleepMetrics(
     val breathingRegularity: Float,  // 0.0-1.0
     val movementIntensity: Float,    // 0.0-1.0
     val breathCyclesDetected: Int,
-    val possibleApnea: Boolean
+    val possibleApnea: Boolean,
+    val signalQuality: Int,          // 0-4 (EXCELLENT–UNKNOWN)
+    val signalNoiseRatio: Float,
+    val instabilityScore: Float,     // ΔΦ(t) in rad/s  (Eq. 5)
+    val instabilityDetected: Boolean // ΔΦ(t) > α·σ_ω   (Eq. 6)
 ) {
-    // Constructor called from JNI
+    // Secondary constructor called from JNI (matches signature (IFFFFFIIIFFI)V)
     constructor(
         stage: Int,
         confidence: Float,
         bpm: Float,
         regularity: Float,
         movement: Float,
-        unused: Float, // JNI artifact, ignore
         cycles: Int,
-        apnea: Boolean
+        apnea: Int,
+        signalQuality: Int,
+        snr: Float,
+        instabilityScore: Float,
+        instabilityDetected: Int
     ) : this(
         SleepStage.fromInt(stage),
         confidence,
@@ -56,7 +63,11 @@ data class SleepMetrics(
         regularity,
         movement,
         cycles,
-        apnea
+        apnea != 0,
+        signalQuality,
+        snr,
+        instabilityScore,
+        instabilityDetected != 0
     )
 }
 

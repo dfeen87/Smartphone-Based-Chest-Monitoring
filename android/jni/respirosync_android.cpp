@@ -7,34 +7,14 @@
 #include <android/log.h>
 #include <string>
 
+// Use the canonical C API header so the SleepMetrics struct layout always
+// matches the core engine exactly (avoids out-of-bounds writes when fields
+// are added to the struct).
+#include "../../core/respirosync_core.h"
+
 #define LOG_TAG "RespiroSync"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-
-// Include the C API from core
-extern "C" {
-    typedef void* RespiroHandle;
-    
-    RespiroHandle respiro_create();
-    void respiro_destroy(RespiroHandle handle);
-    void respiro_start_session(RespiroHandle handle, uint64_t timestamp_ms);
-    void respiro_feed_gyro(RespiroHandle handle, float x, float y, float z, uint64_t timestamp_ms);
-    void respiro_feed_accel(RespiroHandle handle, float x, float y, float z, uint64_t timestamp_ms);
-    
-    typedef struct {
-        int current_stage;
-        float confidence;
-        float breathing_rate_bpm;
-        float breathing_regularity;
-        float movement_intensity;
-        int breath_cycles_detected;
-        int possible_apnea;  // Changed from bool to int to match C API
-        int signal_quality;  // Added signal quality
-        float signal_noise_ratio;  // Added SNR
-    } SleepMetrics;
-    
-    void respiro_get_metrics(RespiroHandle handle, uint64_t timestamp_ms, SleepMetrics* out_metrics);
-}
 
 // ============================================================================
 // JNI BINDINGS
@@ -101,11 +81,12 @@ Java_com_respirosync_RespiroSyncEngine_nativeGetMetrics(JNIEnv* env, jobject thi
         return nullptr;
     }
     
-    // Constructor signature: 9 parameters (IFFFFFIIIF)V
-    // Parameters: current_stage(I), confidence(F), breathing_rate_bpm(F), 
-    // breathing_regularity(F), movement_intensity(F), breath_cycles_detected(I), 
-    // possible_apnea(I), signal_quality(I), signal_noise_ratio(F), void return(V)
-    jmethodID constructor = env->GetMethodID(metricsClass, "<init>", "(IFFFFFIIIF)V");
+    // Constructor signature: 11 parameters (IFFFFFIIIFFI)V
+    // Parameters: current_stage(I), confidence(F), breathing_rate_bpm(F),
+    // breathing_regularity(F), movement_intensity(F), breath_cycles_detected(I),
+    // possible_apnea(I), signal_quality(I), signal_noise_ratio(F),
+    // instability_score(F), instability_detected(I), void return(V)
+    jmethodID constructor = env->GetMethodID(metricsClass, "<init>", "(IFFFFFIIIFFI)V");
     if (!constructor) {
         LOGE("Failed to find SleepMetrics constructor");
         env->DeleteLocalRef(metricsClass);
@@ -124,7 +105,9 @@ Java_com_respirosync_RespiroSyncEngine_nativeGetMetrics(JNIEnv* env, jobject thi
                          metrics.breath_cycles_detected,
                          metrics.possible_apnea,
                          metrics.signal_quality,
-                         metrics.signal_noise_ratio);
+                         metrics.signal_noise_ratio,
+                         metrics.instability_score,
+                         metrics.instability_detected);
     
     // Clean up local reference to prevent memory leaks
     env->DeleteLocalRef(metricsClass);
