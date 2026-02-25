@@ -9,8 +9,10 @@ Metrics per record
   drift_latency  — detection latency (s) for frequency-drift perturbation
   pause_latency  — detection latency (s) for intermittent-pause perturbation
   false_alarms   — alarm count in the stable control segment
-  rms_latency    — detection latency (s) using RMS-envelope baseline (§5.2)
-  fft_latency    — detection latency (s) using FFT-peak-shift baseline (§5.2)
+  rms_latency    — detection latency (s) using RMS-envelope baseline on the
+                   pause perturbation (§5.2); RMS is amplitude-sensitive
+  fft_latency    — detection latency (s) using FFT-peak-shift baseline on the
+                   drift perturbation (§5.2); FFT peak-shift is frequency-sensitive
 
 CSV output
 ----------
@@ -64,11 +66,19 @@ def _apply_drift(signal: np.ndarray, fs: float, onset_s: float) -> np.ndarray:
     After onset_s, compress the tail of the signal in time to simulate a
     rising respiratory rate (frequency drift).  Preserves real signal
     morphology in the stable portion while introducing a controlled perturbation.
+
+    Implementation: tile the tail to 1.6× its length to obtain enough source
+    content, then downsample back to the original length.  This compresses
+    1.6× more respiratory cycles into the same duration, raising the apparent
+    frequency by ×1.6 without requiring additional data beyond what is
+    available.  The tile seam falls beyond the seg_len window used in
+    validation, so no discontinuity artefact enters the analysis segment.
     """
     onset = int(onset_s * fs)
     stable_part = signal[:onset].copy()
     tail = signal[onset:]
-    tail_fast = resample(tail, int(len(tail) * 1.6))[:len(tail)]
+    tiled = np.tile(tail, 2)[:int(len(tail) * 1.6)]
+    tail_fast = resample(tiled, len(tail))
     return np.concatenate([stable_part, tail_fast])
 
 
@@ -243,10 +253,14 @@ def _process_record(record_id: int, use_synthetic: bool = False) -> dict:
         result_pause["delta_phi"], result_pause["threshold"], n_stable, fs
     )
 
-    # 5. RMS baseline latency — computed on drift segment (PAPER.md §5.2)
-    rms_lat = _rms_detection_latency(drift_sig, fs, n_stable, n_stable)
+    # 5. RMS baseline latency — computed on pause segment (PAPER.md §5.2).
+    #    RMS is an amplitude-based metric; it detects the near-zero amplitude
+    #    drop of the pause perturbation rather than the frequency drift.
+    rms_lat = _rms_detection_latency(pause_sig, fs, n_stable, n_stable)
 
-    # 6. FFT baseline latency — computed on drift segment (PAPER.md §5.2)
+    # 6. FFT baseline latency — computed on drift segment (PAPER.md §5.2).
+    #    FFT peak-shift is a frequency-based metric; it is applied to the
+    #    frequency-drift perturbation where a spectral peak shift is expected.
     fft_lat = _fft_detection_latency(drift_sig, fs, n_stable, n_stable)
 
     return dict(
@@ -272,8 +286,8 @@ def run_multi_record_validation(
       - drift_latency    (s)
       - pause_latency    (s)
       - false_alarms     (count in stable segment)
-      - rms_latency      (s, RMS baseline)
-      - fft_latency      (s, FFT baseline)
+      - rms_latency      (s, RMS-envelope baseline on pause perturbation)
+      - fft_latency      (s, FFT-peak-shift baseline on drift perturbation)
 
     Saves per-record metrics to ``results/metrics.csv`` and aggregated
     mean ± SD to ``results/summary.csv``.

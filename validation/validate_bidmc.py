@@ -57,12 +57,19 @@ def _apply_drift(signal: np.ndarray, fs: float, onset_s: float) -> np.ndarray:
     After onset_s, compress the tail of the signal in time to simulate a
     rising respiratory rate (frequency drift).  This preserves real signal
     morphology in the stable portion while introducing a controlled perturbation.
+
+    Implementation: tile the tail to 1.6× its length to obtain enough source
+    content, then downsample back to the original length.  This compresses
+    1.6× more respiratory cycles into the same duration, raising the apparent
+    frequency by ×1.6.  The tile seam falls beyond the seg_len window used in
+    validation, so no discontinuity artefact enters the analysis segment.
     """
     onset = int(onset_s * fs)
     stable_part = signal[:onset].copy()
     tail = signal[onset:]
-    # Resample tail to 1.6× samples → same duration but higher rate
-    tail_fast = resample(tail, int(len(tail) * 1.6))[:len(tail)]
+    # Tile to supply 1.6× more cycles, then downsample to original length
+    tiled = np.tile(tail, 2)[:int(len(tail) * 1.6)]
+    tail_fast = resample(tiled, len(tail))
     return np.concatenate([stable_part, tail_fast])
 
 
