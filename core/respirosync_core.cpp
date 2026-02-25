@@ -1,12 +1,26 @@
 /*
  * RespiroSync™ Core Engine
  * Chest-mounted respiratory monitoring via smartphone gyroscope/accelerometer
- * 
- * PROPRIETARY AND CONFIDENTIAL
- * Copyright (c) 2025 - All Rights Reserved
- * 
- * This is the licensable IP - the "magic" that turns phone sensors into
- * clinical-grade respiratory monitoring.
+ *
+ * Scientific basis: "A Deterministic Phase–Memory Operator for Early
+ * Respiratory Instability Detection Using Smartphone-Based Chest Monitoring"
+ * See PAPER.md for full derivation and validation protocol.
+ *
+ * Pipeline (PAPER.md §7.1):
+ *
+ *   Chest IMU  →  Preprocess           →  Analytic Signal  →  Phase  →  Memory  →  Decision
+ *   (accel/gyro)  (detrend + bandpass)     (Hilbert approx)    θ(t)     ω̄(t)      ΔΦ(t) > α·σ_ω
+ *
+ * Key operator variables (equation numbers refer to PAPER.md):
+ *   x(t)   – scalar respiration channel formed by gravity-axis projection (Eq. 1)
+ *   z(t)   – analytic signal = x(t) + i·H[x(t)]  (Eq. 2)
+ *   θ(t)   – instantaneous phase = arg(z(t))
+ *   ω(t)   – instantaneous phase velocity = dθ/dt  (Eq. 3)
+ *   ω̄(t)  – short-term phase memory = rolling mean of ω over M samples  (Eq. 4)
+ *   ΔΦ(t) – instability metric = |ω(t) − ω̄(t)|  (Eq. 5)
+ *   σ_ω   – baseline std-dev of ω on initial stable segment  (Eq. 6)
+ *   α     – sensitivity parameter ∈ [2, 3]  (Eq. 6)
+ *   L     – persistence window (optional, Eq. 7)
  */
 
 #include <algorithm>
@@ -81,8 +95,165 @@ public:
 };
 
 // ============================================================================
-// RESPIROSYNC ENGINE - THE BRAIN
+// PHASE–MEMORY OPERATOR  (PAPER.md §3–4)
 // ============================================================================
+//
+// Implements the deterministic instability metric ΔΦ(t) described in the
+// manuscript.  All variable names and equation numbers refer to PAPER.md.
+//
+// Step 1 – Analytic signal (Eq. 2):
+//   The Hilbert transform H[x] is approximated via the derivative method,
+//   which is valid for narrow-band signals (breathing band 0.1–0.5 Hz):
+//       H[x](t) ≈ −(1/ω₀) · dx/dt
+//   where ω₀ = 2π·f₀ is the angular centre frequency of the passband.
+//
+// Step 2 – Instantaneous phase (Eq. 2 / §3.1):
+//       θ(t) = atan2(H[x](t), x(t))
+//
+// Step 3 – Phase velocity with unwrapping (Eq. 3):
+//       ω(t) = Δθ / Δt   (discrete, after 2π-unwrap)
+//
+// Step 4 – Short-term phase memory (Eq. 4):
+//       ω̄(t) = (1/M) Σ_{k=0}^{M−1} ω[n−k]   (rolling mean, M samples)
+//
+// Step 5 – Instability metric (Eq. 5):
+//       ΔΦ(t) = |ω(t) − ω̄(t)|
+//
+// Step 6 – Baseline-normalized threshold (Eq. 6):
+//       instability iff ΔΦ(t) > α · σ_ω
+//   σ_ω is estimated on the first BASELINE_WINDOW samples; α = 2.0 (default).
+
+class PhaseMemoryOperator {
+public:
+    // Tunable parameters (PAPER.md §4.2 and §8)
+    //   alpha – sensitivity parameter α ∈ [2, 3]  (Eq. 6)
+    //   memory_samples – phase-memory window M  (Eq. 4)
+    //   baseline_samples – number of initial samples used to estimate σ_ω
+    static constexpr float DEFAULT_ALPHA       = 2.0f;
+    static constexpr int   MEMORY_SAMPLES      = 150;   // Tₘ ≈ 3 s at 50 Hz
+    static constexpr int   BASELINE_SAMPLES    = 250;   // ≈ 5 s at 50 Hz
+    // Centre angular frequency of the breathing passband (≈0.3 Hz at 50 Hz)
+    static constexpr float OMEGA_0             = 2.0f * 3.14159265f * 0.3f;
+    static constexpr float DT                  = 1.0f / 50.0f; // nominal sample period (s)
+
+private:
+    float prev_x;           // x[n−1] for derivative (dx/dt)
+    float prev_theta;       // θ[n−1] for unwrapped phase velocity
+    bool  initialized;
+
+    // Rolling buffer for phase velocity ω (M samples)
+    float  omega_buf[MEMORY_SAMPLES];
+    int    omega_idx;
+    float  omega_sum;       // running sum for fast mean
+    int    omega_count;     // samples filled so far
+
+    // Baseline estimation for σ_ω (first BASELINE_SAMPLES samples)
+    float  baseline_buf[BASELINE_SAMPLES];
+    int    baseline_count;
+    bool   baseline_ready;
+    float  sigma_omega;     // σ_ω (Eq. 6)
+
+    // Output
+    float  delta_phi;       // ΔΦ(t) – most recent instability metric  (Eq. 5)
+
+    // Unwrap a phase difference into (−π, π]
+    static float unwrapDelta(float d) {
+        while (d >  3.14159265f) d -= 2.0f * 3.14159265f;
+        while (d < -3.14159265f) d += 2.0f * 3.14159265f;
+        return d;
+    }
+
+public:
+    PhaseMemoryOperator() { reset(); }
+
+    void reset() {
+        prev_x        = 0.0f;
+        prev_theta    = 0.0f;
+        initialized   = false;
+        omega_idx     = 0;
+        omega_sum     = 0.0f;
+        omega_count   = 0;
+        baseline_count = 0;
+        baseline_ready = false;
+        sigma_omega   = 1.0f;  // safe non-zero default until calibrated
+        delta_phi     = 0.0f;
+        for (int i = 0; i < MEMORY_SAMPLES;   ++i) omega_buf[i]    = 0.0f;
+        for (int i = 0; i < BASELINE_SAMPLES; ++i) baseline_buf[i] = 0.0f;
+    }
+
+    // Feed one bandpass-filtered sample x[n].
+    // Returns the current instability metric ΔΦ(t).
+    float update(float x) {
+        if (!initialized) {
+            prev_x     = x;
+            prev_theta = 0.0f;
+            initialized = true;
+            return 0.0f;
+        }
+
+        // --- Step 1: Analytic signal via derivative approximation (Eq. 2) ---
+        // H[x](t) ≈ −dx/dt / ω₀   (valid for narrow-band breathing signal)
+        float dx     = x - prev_x;
+        float h_x    = -dx / (OMEGA_0 * DT);   // approximate Hilbert component
+        prev_x = x;
+
+        // --- Step 2: Instantaneous phase θ(t) (§3.1) ---
+        float theta  = std::atan2(h_x, x);
+
+        // --- Step 3: Phase velocity ω(t) with 2π-unwrap (Eq. 3) ---
+        float d_theta = unwrapDelta(theta - prev_theta);
+        float omega   = d_theta / DT;           // rad/s
+        prev_theta    = theta;
+
+        // --- Step 4: Phase memory ω̄(t) – rolling mean over M samples (Eq. 4) ---
+        // Outgoing sample leaves the window
+        float outgoing  = omega_buf[omega_idx];
+        omega_buf[omega_idx] = omega;
+        omega_sum += omega - outgoing;
+        omega_idx = (omega_idx + 1) % MEMORY_SAMPLES;
+        if (omega_count < MEMORY_SAMPLES) ++omega_count;
+
+        float omega_mean = (omega_count > 0) ? (omega_sum / omega_count) : omega;
+
+        // --- Step 5: Instability metric ΔΦ(t) = |ω(t) − ω̄(t)| (Eq. 5) ---
+        delta_phi = std::fabs(omega - omega_mean);
+
+        // --- Baseline σ_ω estimation (Eq. 6, calibration window) ---
+        if (!baseline_ready) {
+            baseline_buf[baseline_count++] = omega;
+            if (baseline_count >= BASELINE_SAMPLES) {
+                // Compute mean and std-dev of ω over the baseline window
+                float mean = 0.0f;
+                for (int i = 0; i < BASELINE_SAMPLES; ++i) mean += baseline_buf[i];
+                mean /= BASELINE_SAMPLES;
+                float var = 0.0f;
+                for (int i = 0; i < BASELINE_SAMPLES; ++i) {
+                    float diff = baseline_buf[i] - mean;
+                    var += diff * diff;
+                }
+                var /= BASELINE_SAMPLES;
+                sigma_omega   = std::sqrt(var);
+                if (sigma_omega < 1e-4f) sigma_omega = 1e-4f;  // guard against zero
+                baseline_ready = true;
+            }
+        }
+
+        return delta_phi;
+    }
+
+    // ΔΦ(t) – most recent instability score  (Eq. 5)
+    float instabilityScore() const { return delta_phi; }
+
+    // True when ΔΦ(t) > α · σ_ω  (Eq. 6)
+    bool instabilityDetected(float alpha = DEFAULT_ALPHA) const {
+        return baseline_ready && (delta_phi > alpha * sigma_omega);
+    }
+
+    // σ_ω estimated on the calibration window
+    float baselineSigma() const { return sigma_omega; }
+};
+
+
 
 class RespiroEngine {
 private:
@@ -98,6 +269,10 @@ private:
     float breathing_signal_sum;
     float breathing_signal_sum_squares;
     int buffer_index;
+
+    // Phase–memory operator (PAPER.md §3–4)
+    // Computes ΔΦ(t) = |ω(t) − ω̄(t)| and the threshold decision (Eq. 5–6).
+    PhaseMemoryOperator phase_memory;
     
     // State tracking
     uint64_t last_peak_time;
@@ -371,6 +546,7 @@ public:
         session_start_time = timestamp_ms;
         breath_history.clear();
         breathing_filter.reset();
+        phase_memory.reset();  // reset phase–memory operator (PAPER.md §3)
         buffer_index = 0;
         current_stage = UNKNOWN;
         current_bpm = 0.0f;
@@ -422,24 +598,36 @@ public:
             accel_buffer.pop_front();
         }
         
-        // CORE PROCESSING PIPELINE
-        // 1. Remove gravity from accelerometer
+        // CORE PROCESSING PIPELINE  (PAPER.md §7.1)
+        //
+        // Step 1 – Form scalar respiration channel x(t)  (Eq. 1)
+        //   Here we use the gravity-removed accelerometer magnitude as x(t).
+        //   A gravity-aligned projection a(t)·û_b(t) would be preferred when
+        //   sensor-fusion orientation is available (see PAPER.md §2.3).
         float chest_motion = removeGravity(accel_magnitude);
         
-        // 2. Add gyroscope contribution (angular velocity indicates rotation)
-        // Safe access with explicit empty check
+        // Gyroscope contribution – optional motion-rejection gating (§2.4)
+        // Angular velocity ‖Ω(t)‖ is blended lightly; in a full implementation
+        // it should gate rather than add (PAPER.md §2.4).
         if (!gyro_buffer.empty()) {
             SensorSample gyro_sample = gyro_buffer.back();
             chest_motion += magnitude(gyro_sample) * 0.1f; // Scale factor
         }
         
-        // 3. Bandpass filter to isolate breathing frequency
+        // Step 2 – Bandpass filter x(t) to isolate breathing frequency (§2.4)
+        //   Removes drift (low-frequency) and motion artefacts (high-frequency).
+        //   Passband ≈ 0.1–0.5 Hz corresponds to 6–30 breaths per minute.
         float breathing_signal = breathing_filter.process(chest_motion);
         
-        // 4. Detect breathing peaks
+        // Step 3 – Phase–memory operator on bandpass-filtered x(t) (§3–4)
+        //   Updates the analytic signal approximation, instantaneous phase θ(t),
+        //   phase velocity ω(t), phase memory ω̄(t), and instability score ΔΦ(t).
+        phase_memory.update(breathing_signal);
+        
+        // Step 4 – Legacy peak detection (breath-cycle rate estimation)
         detectBreathingPeaks(breathing_signal, timestamp_ms);
         
-        // 5. Update metrics
+        // Step 5 – Update respiratory rate estimate
         current_bpm = calculateBreathingRate();
         
         // Calculate movement intensity (for sleep staging)
@@ -487,6 +675,12 @@ public:
             breath_history.size(),
             metrics.breathing_regularity
         );
+
+        // Phase–memory operator output (PAPER.md §4)
+        //   instability_score  = ΔΦ(t) = |ω(t) − ω̄(t)|  (Eq. 5)
+        //   instability_detected = 1 when ΔΦ(t) > α · σ_ω  (Eq. 6)
+        metrics.instability_score    = phase_memory.instabilityScore();
+        metrics.instability_detected = phase_memory.instabilityDetected() ? 1 : 0;
         
         return metrics;
     }
