@@ -114,6 +114,7 @@ _last_metrics: dict = {}
 # API_KEY is the shared secret clients exchange for a bearer token.
 _JWT_SECRET: str = os.environ.get("JWT_SECRET", "changeme-jwt-secret")
 _API_KEY: str = os.environ.get("API_KEY", "changeme")
+_USING_DEFAULT_KEY: bool = "API_KEY" not in os.environ
 _JWT_ALGORITHM = "HS256"
 _JWT_EXPIRY_HOURS = 24
 
@@ -150,8 +151,12 @@ def require_jwt(f):
 
 @app.route("/ping")
 def ping() -> object:
-    """Unauthenticated keepalive endpoint for load-balancers and uptime monitors."""
-    return jsonify({"pong": True})
+    """Unauthenticated keepalive endpoint for load-balancers and uptime monitors.
+
+    Also returns ``default_key_active`` so the dashboard can auto-connect when
+    no custom ``API_KEY`` environment variable has been configured.
+    """
+    return jsonify({"pong": True, "default_key_active": _USING_DEFAULT_KEY})
 
 
 @app.route("/api/auth/token", methods=["POST"])

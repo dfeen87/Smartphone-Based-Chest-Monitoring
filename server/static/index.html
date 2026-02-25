@@ -585,7 +585,16 @@ document.getElementById("auto-refresh").addEventListener("change", scheduleRefre
 
 /* ── Init ────────────────────────────────────────────────────────── */
 // Attempt automatic connection if we have a stored token or API key.
+// When the server reports default_key_active (no API_KEY env var set),
+// auto-populate the field with the built-in default so the dashboard
+// works out-of-the-box without any manual configuration.
 (async function init() {
+  try {
+    const ping = await fetch("/ping").then(r => r.json());
+    if (ping.default_key_active && !sessionStorage.getItem("rs_apikey")) {
+      document.getElementById("cfg-apikey").value = "changeme";
+    }
+  } catch (_err) { /* network unavailable before auth — safe to ignore */ }
   try {
     await ensureToken();          // succeeds immediately if token cached
     loadStatus();
