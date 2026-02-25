@@ -298,6 +298,15 @@
   <div class="card" id="config-card">
     <h2>Configuration</h2>
     <div class="form-group">
+      <label for="cfg-apikey">API Key  <a href="#" onclick="return false" title="Server API key — set via the API_KEY environment variable on the server">ⓘ</a></label>
+      <input type="password" id="cfg-apikey" placeholder="Enter API key…" autocomplete="current-password" />
+      <div class="hint">Required to authenticate with the server.  Default: <code>changeme</code></div>
+    </div>
+    <div class="btn-row" style="margin-bottom:12px">
+      <button class="btn btn-secondary" onclick="connect()">⇌ Connect</button>
+      <span id="connect-status" style="font-size:.75rem;color:var(--muted);margin-left:8px"></span>
+    </div>
+    <div class="form-group">
       <label for="cfg-M">Memory window M (samples)  <a href="#" onclick="return false" title="Rolling mean window for ω̄(t) — Eq. 4">ⓘ</a></label>
       <input type="number" id="cfg-M" min="10" max="1000" step="10" value="150" />
       <div class="hint">≈ M/fs seconds of phase memory.  Default: 150 (≈3 s at 50 Hz)</div>
@@ -350,9 +359,80 @@
 </main>
 
 <script>
+/* ── JWT token management ─────────────────────────────────────────── */
+const TOKEN_KEY = "rs_token";
+let _token = sessionStorage.getItem(TOKEN_KEY) || null;
+
+/** Restore a previously saved API key (never the token itself). */
+(function restoreApiKey() {
+  const saved = sessionStorage.getItem("rs_apikey");
+  if (saved) document.getElementById("cfg-apikey").value = saved;
+})();
+
+/**
+ * Exchange the API key for a signed JWT and cache it in sessionStorage.
+ * Throws if authentication fails.
+ */
+async function ensureToken() {
+  if (_token) return _token;
+  const key = document.getElementById("cfg-apikey").value.trim();
+  if (!key) throw new Error("API key is required — enter it in the Configuration panel");
+  const res = await fetch("/api/auth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key }),
+  });
+  if (!res.ok) throw new Error("Authentication failed — check your API key");
+  const data = await res.json();
+  _token = data.token;
+  sessionStorage.setItem(TOKEN_KEY, _token);
+  sessionStorage.setItem("rs_apikey", key);
+  return _token;
+}
+
+/** Clear the cached token (forces re-authentication on the next request). */
+function clearToken() {
+  _token = null;
+  sessionStorage.removeItem(TOKEN_KEY);
+}
+
+/** Trigger a manual connect and update the connect-status indicator. */
+async function connect() {
+  clearToken();
+  const el = document.getElementById("connect-status");
+  el.textContent = "Connecting…";
+  el.style.color = "var(--muted)";
+  try {
+    await ensureToken();
+    el.textContent = "✓ Connected";
+    el.style.color = "var(--green)";
+    // Refresh all panels now that we have a valid token
+    loadStatus();
+    loadConfig();
+    loadLogs();
+  } catch (e) {
+    el.textContent = "✗ " + e.message;
+    el.style.color = "var(--red)";
+  }
+}
+
 /* ── Helpers ─────────────────────────────────────────────────────── */
+/**
+ * Authenticated fetch wrapper.
+ * Automatically includes the Bearer token and retries once if the token
+ * has expired (HTTP 401 causes a single re-authentication attempt).
+ */
 async function apiFetch(path, opts = {}) {
-  const res = await fetch(path, opts);
+  const token = await ensureToken();
+  opts.headers = { ...(opts.headers || {}), "Authorization": "Bearer " + token };
+  let res = await fetch(path, opts);
+  if (res.status === 401) {
+    // Token may have expired — discard it and retry once with a fresh token
+    clearToken();
+    const newToken = await ensureToken();
+    opts.headers["Authorization"] = "Bearer " + newToken;
+    res = await fetch(path, opts);
+  }
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -381,7 +461,9 @@ async function loadStatus() {
     document.getElementById("st-pipeline").textContent = d.pipeline;
   } catch (e) {
     document.getElementById("status-dot").className   = "dot offline";
-    document.getElementById("status-text").textContent = "Offline";
+    document.getElementById("status-text").textContent =
+      e.message.includes("key") ? "Auth required" : "Offline";
+    document.getElementById("uptime-text").textContent = "";
   }
 }
 
@@ -502,10 +584,21 @@ function scheduleRefresh() {
 document.getElementById("auto-refresh").addEventListener("change", scheduleRefresh);
 
 /* ── Init ────────────────────────────────────────────────────────── */
-loadStatus();
-loadConfig();
-loadLogs();
-scheduleRefresh();
+// Attempt automatic connection if we have a stored token or API key.
+(async function init() {
+  try {
+    await ensureToken();          // succeeds immediately if token cached
+    loadStatus();
+    loadConfig();
+    loadLogs();
+    scheduleRefresh();
+  } catch (_) {
+    // No valid token yet — show a prompt in the connect-status area
+    const el = document.getElementById("connect-status");
+    el.textContent = "Enter API key and click Connect";
+    el.style.color = "var(--yellow)";
+  }
+})();
 </script>
 </body>
 </html>
