@@ -17,8 +17,10 @@ services:
 
     # ── Start command ────────────────────────────────────────────────
     # Render sets the PORT environment variable automatically.
-    # The Flask app reads PORT via os.environ.get("PORT", 5000).
-    startCommand: python server/app.py
+    # gunicorn binds directly to 0.0.0.0:$PORT so Render can detect
+    # the open HTTP port reliably (Flask's dev server is not suitable
+    # for production and can cause "No open HTTP ports detected" errors).
+    startCommand: gunicorn --bind 0.0.0.0:${PORT:-5000} --chdir server app:app
 
     # ── Health check ─────────────────────────────────────────────────
     # Render pings this path to verify the service is live.

@@ -32,3 +32,6 @@ validation/figures/
 __pycache__/
 *.pyc
 *.pyo
+
+# Gunicorn runtime files
+*.ctl
