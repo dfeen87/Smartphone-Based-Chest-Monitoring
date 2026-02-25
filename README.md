@@ -34,6 +34,7 @@
 - [Render.com Deployment](#rendercom-deployment)
 - [Reproducibility Layer](#reproducibility-layer)
 - [Validation Protocol](#validation-protocol)
+- [Multi-Record Validation & Results Export](#multi-record-validation--results-export)
 - [PhysioNet / Real-Data Validation](#physionet--real-data-validation)
 - [Data Sources & Citations](#data-sources--citations)
 - [Use Cases](#use-cases)
@@ -285,12 +286,18 @@ phase–memory operator (PAPER.md §3–4) via a REST API and a browser UI.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /` | Dashboard UI — status, metrics, configuration, live logs |
+| `GET /` | Dashboard UI — status, metrics, configuration, live logs, validation |
 | `GET /api/status` | System status (version, uptime, pipeline name) |
 | `GET /api/logs?n=50` | Last *n* structured log entries |
 | `GET /api/config` | Current operator parameters (M, α, baseline, fs) |
 | `POST /api/config` | Update operator parameters at runtime |
 | `POST /api/run` | Run the operator on a synthetic signal and return metrics |
+| `POST /api/validate` | Run multi-record BIDMC validation (N records, returns mean ± SD) |
+| `GET /api/results/metrics.csv` | Download per-record metrics CSV |
+| `GET /api/results/summary.csv` | Download aggregated summary CSV |
+| `GET /api/results/pdf` | Download auto-generated PDF report |
+| `GET /api/results/docx` | Download auto-generated DOCX report |
+| `POST /api/send-results` | Email results (CSV + PDF + DOCX) to a recipient |
 
 ### Deploy to Render.com (one-click)
 
@@ -400,7 +407,91 @@ See [`docs/VALIDATION.md`](docs/VALIDATION.md) for the full protocol.
 
 ---
 
-## PhysioNet / Real-Data Validation
+## Multi-Record Validation & Results Export
+
+The `validation/multi_record_validation.py` module extends the single-record
+`validate_bidmc.py` script to process N ≥ 5 BIDMC records automatically and
+produce the quantitative Results section metrics defined in PAPER.md §5.3.
+
+### Run from the command line
+
+```bash
+# Offline / CI mode — uses synthetic signals, no internet required
+python validation/multi_record_validation.py --n-records 5 --synthetic
+
+# With real PhysioNet data (requires internet + wfdb)
+pip install wfdb
+python validation/multi_record_validation.py --n-records 5
+```
+
+### Output files
+
+| File | Description |
+|------|-------------|
+| `results/metrics.csv` | Per-record metrics — one row per BIDMC record |
+| `results/summary.csv` | Aggregated mean ± SD across all records |
+
+Per-record CSV columns:
+```
+record_id, drift_latency, pause_latency, false_alarms, rms_latency, fft_latency
+```
+
+Aggregated summary CSV columns:
+```
+metric, mean, std
+```
+
+### Download results from the dashboard
+
+After running validation from the dashboard or API, results can be downloaded
+in multiple formats:
+
+| Endpoint | Format | Description |
+|----------|--------|-------------|
+| `GET /api/results/metrics.csv` | CSV | Per-record metrics |
+| `GET /api/results/summary.csv` | CSV | Aggregated statistics |
+| `GET /api/results/pdf`         | PDF | Auto-generated report (Table 1 + 2) |
+| `GET /api/results/docx`        | DOCX | Auto-generated report (Table 1 + 2) |
+
+All download endpoints require a JWT bearer token (same authentication as other
+`/api/*` endpoints).
+
+### Email delivery
+
+```bash
+curl -X POST http://localhost:5000/api/send-results \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "author@example.com"}'
+```
+
+SMTP is configured via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SMTP_HOST` | `localhost` | SMTP server hostname |
+| `SMTP_PORT` | `587` | SMTP server port |
+| `SMTP_USER` | — | SMTP username (optional) |
+| `SMTP_PASS` | — | SMTP password (optional) |
+| `SMTP_FROM` | `respirosync@localhost` | Sender address |
+
+### Dashboard — Validation form
+
+The dashboard (`/`) includes a **Multi-Record Validation** panel with:
+
+- **Records to evaluate** input (default 5)
+- **Synthetic fallback** checkbox (no internet required)
+- **Run Validation** button
+- Aggregated statistics display (mean ± SD per metric)
+- Download buttons for CSV, PDF, and DOCX
+- Email delivery form
+
+### Methods statement (for the paper)
+
+> *"Results are averaged across N = 5 BIDMC recordings using the
+> semi-synthetic perturbation protocol described in Section 5."*
+
+---
 
 The `validation/` directory provides a complete semi-real validation pipeline
 using the PhysioNet **BIDMC Respiratory Dataset**

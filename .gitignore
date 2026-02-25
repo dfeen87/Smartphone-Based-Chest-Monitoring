@@ -35,3 +35,9 @@ __pycache__/
 
 # Gunicorn runtime files
 *.ctl
+
+# Generated validation results (produced at runtime by multi_record_validation.py)
+results/metrics.csv
+results/summary.csv
+results/results.pdf
+results/results.docx

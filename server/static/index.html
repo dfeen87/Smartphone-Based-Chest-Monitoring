@@ -57,7 +57,7 @@
     main {
       display: grid;
       grid-template-columns: 320px 1fr;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto 1fr auto;
       gap: 16px;
       padding: 16px 24px;
       max-width: 1200px;
@@ -201,11 +201,35 @@
     /* ── Responsive ─────────────────────────────────────────────────── */
     @media (max-width: 700px) {
       main { grid-template-columns: 1fr; }
-      #metrics-card, #log-card { grid-column: 1; }
-      #metrics-card { grid-row: 2; }
-      #log-card     { grid-row: 4; }
-      #config-card  { grid-row: 3; }
+      #metrics-card, #log-card, #validation-card { grid-column: 1; }
+      #metrics-card  { grid-row: 2; }
+      #log-card      { grid-row: 4; }
+      #config-card   { grid-row: 3; }
+      #validation-card { grid-row: 5; }
     }
+
+    /* ── Validation card ─────────────────────────────────────────────── */
+    #validation-card { grid-column: 1 / -1; grid-row: 3; }
+    .validation-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+    .validation-row .form-group { margin-bottom: 0; min-width: 180px; }
+    #val-status { font-size: .75rem; color: var(--muted); margin-top: 6px; min-height: 1.2em; }
+    .val-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .val-stat {
+      background: var(--bg);
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .val-stat .vlabel { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+    .val-stat .vmean  { font-size: 1.1rem; font-weight: 700; margin-top: 2px; font-family: var(--mono); }
+    .val-stat .vsd    { font-size: .7rem; color: var(--muted); }
+    .dl-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .dl-row a.btn { text-decoration: none; }
+    #methods-stmt { font-size: .8rem; color: var(--muted); margin-top: 10px; font-style: italic; }
   </style>
 </head>
 <body>
@@ -354,6 +378,50 @@
       </label>
     </div>
     <div id="log-output"><span style="color:var(--muted)">Loading logs…</span></div>
+  </div>
+  <!-- ── Validation ───────────────────────────────────────────────── -->
+  <div class="card" id="validation-card">
+    <h2>Multi-Record Validation  <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:.7rem">(PAPER.md §5 — BIDMC dataset)</span></h2>
+    <div class="validation-row">
+      <div class="form-group">
+        <label for="val-n">BIDMC records to evaluate</label>
+        <input type="number" id="val-n" min="1" max="53" step="1" value="5" style="width:100px" />
+        <div class="hint">Default: 5. Range: 1–53.</div>
+      </div>
+      <div class="form-group">
+        <label for="val-synthetic" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="val-synthetic" checked />
+          Synthetic fallback (no internet)
+        </label>
+        <div class="hint">Uncheck to download real BIDMC data from PhysioNet.</div>
+      </div>
+      <button class="btn btn-primary" id="val-btn" onclick="runValidation()">▶ Run Validation</button>
+    </div>
+    <div id="val-status"></div>
+    <div class="val-stats-grid" id="val-stats-grid" style="display:none">
+      <div class="val-stat"><div class="vlabel">Drift Latency</div><div class="vmean" id="vs-drift-mean">—</div><div class="vsd" id="vs-drift-sd"></div></div>
+      <div class="val-stat"><div class="vlabel">Pause Latency</div><div class="vmean" id="vs-pause-mean">—</div><div class="vsd" id="vs-pause-sd"></div></div>
+      <div class="val-stat"><div class="vlabel">False Alarms</div><div class="vmean" id="vs-fa-mean">—</div><div class="vsd" id="vs-fa-sd"></div></div>
+      <div class="val-stat"><div class="vlabel">RMS Latency</div><div class="vmean" id="vs-rms-mean">—</div><div class="vsd" id="vs-rms-sd"></div></div>
+      <div class="val-stat"><div class="vlabel">FFT Latency</div><div class="vmean" id="vs-fft-mean">—</div><div class="vsd" id="vs-fft-sd"></div></div>
+    </div>
+    <div id="methods-stmt" style="display:none"></div>
+    <div class="dl-row" id="val-downloads" style="display:none">
+      <a class="btn btn-secondary" href="#" id="dl-metrics-csv" onclick="return dlFile('/api/results/metrics.csv')">⬇ metrics.csv</a>
+      <a class="btn btn-secondary" href="#" id="dl-summary-csv" onclick="return dlFile('/api/results/summary.csv')">⬇ summary.csv</a>
+      <a class="btn btn-secondary" href="#" onclick="return dlFile('/api/results/pdf')">⬇ results.pdf</a>
+      <a class="btn btn-secondary" href="#" onclick="return dlFile('/api/results/docx')">⬇ results.docx</a>
+    </div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div class="form-group" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <label for="val-email">Email results</label>
+          <input type="email" id="val-email" placeholder="recipient@example.com" style="width:100%" />
+        </div>
+        <button class="btn btn-secondary" onclick="sendResults()" style="white-space:nowrap">✉ Send Results</button>
+        <span id="email-status" style="font-size:.75rem;color:var(--muted);align-self:center"></span>
+      </div>
+    </div>
   </div>
 
 </main>
@@ -539,6 +607,122 @@ function setRunStatus(msg, color) {
   const el = document.getElementById("run-status");
   el.textContent = msg;
   el.style.color = color;
+}
+
+/* ── Validation ──────────────────────────────────────────────────── */
+async function runValidation() {
+  const btn = document.getElementById("val-btn");
+  const n = parseInt(document.getElementById("val-n").value) || 5;
+  const synthetic = document.getElementById("val-synthetic").checked;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Running…';
+  setValStatus("Validation running — this may take a moment…", "var(--accent)");
+  document.getElementById("val-stats-grid").style.display = "none";
+  document.getElementById("val-downloads").style.display = "none";
+  document.getElementById("methods-stmt").style.display = "none";
+
+  try {
+    const d = await apiFetch("/api/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ n_records: n, synthetic }),
+    });
+    const s = d.stats;
+    function fmtStat(key) {
+      const st = s[key];
+      if (!st || st.mean == null) return "—";
+      return (typeof st.mean === "number" ? st.mean.toFixed(4) : "—");
+    }
+    function fmtSd(key) {
+      const st = s[key];
+      if (!st || st.std == null) return "";
+      return "± " + (typeof st.std === "number" ? st.std.toFixed(4) : "—") + " SD";
+    }
+    document.getElementById("vs-drift-mean").textContent = fmtStat("drift_latency") + (s.drift_latency && s.drift_latency.mean != null ? " s" : "");
+    document.getElementById("vs-drift-sd").textContent   = fmtSd("drift_latency");
+    document.getElementById("vs-pause-mean").textContent = fmtStat("pause_latency") + (s.pause_latency && s.pause_latency.mean != null ? " s" : "");
+    document.getElementById("vs-pause-sd").textContent   = fmtSd("pause_latency");
+    document.getElementById("vs-fa-mean").textContent    = fmtStat("false_alarms");
+    document.getElementById("vs-fa-sd").textContent      = fmtSd("false_alarms");
+    document.getElementById("vs-rms-mean").textContent   = fmtStat("rms_latency") + (s.rms_latency && s.rms_latency.mean != null ? " s" : "");
+    document.getElementById("vs-rms-sd").textContent     = fmtSd("rms_latency");
+    document.getElementById("vs-fft-mean").textContent   = fmtStat("fft_latency") + (s.fft_latency && s.fft_latency.mean != null ? " s" : "");
+    document.getElementById("vs-fft-sd").textContent     = fmtSd("fft_latency");
+
+    document.getElementById("val-stats-grid").style.display = "";
+    document.getElementById("val-downloads").style.display  = "";
+    const ms = document.getElementById("methods-stmt");
+    ms.textContent = d.methods_statement || "";
+    ms.style.display = "";
+    setValStatus("✓ Validation complete — " + d.n_records + " records processed", "var(--green)");
+    loadLogs();
+  } catch (e) {
+    setValStatus("✗ Validation failed: " + e.message, "var(--red)");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "▶ Run Validation";
+  }
+}
+
+function setValStatus(msg, color) {
+  const el = document.getElementById("val-status");
+  el.textContent = msg;
+  el.style.color = color;
+}
+
+/**
+ * Download a file from a protected endpoint by fetching it with the JWT and
+ * triggering a browser download via a temporary object URL.
+ */
+async function dlFile(path) {
+  try {
+    const token = await ensureToken();
+    const res = await fetch(path, { headers: { "Authorization": "Bearer " + token } });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      setValStatus("✗ Download failed: " + (err.error || res.statusText), "var(--red)");
+      return false;
+    }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    // Derive filename from the Content-Disposition header or the path
+    const cd = res.headers.get("content-disposition") || "";
+    const match = cd.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    a.download = match ? match[1].replace(/['"]/g, "") : path.split("/").pop();
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    setValStatus("✗ Download error: " + e.message, "var(--red)");
+  }
+  return false;
+}
+
+async function sendResults() {
+  const email = document.getElementById("val-email").value.trim();
+  const el = document.getElementById("email-status");
+  if (!email || !email.includes("@")) {
+    el.textContent = "✗ Enter a valid email address";
+    el.style.color = "var(--red)";
+    return;
+  }
+  el.textContent = "Sending…";
+  el.style.color = "var(--muted)";
+  try {
+    await apiFetch("/api/send-results", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    el.textContent = "✓ Sent to " + email;
+    el.style.color = "var(--green)";
+  } catch (e) {
+    el.textContent = "✗ " + e.message;
+    el.style.color = "var(--red)";
+  }
 }
 
 /* ── Logs ────────────────────────────────────────────────────────── */

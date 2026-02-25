@@ -139,3 +139,132 @@ def test_missing_bearer_prefix(client):
     token = _make_token()
     rv = client.get("/api/status", headers={"Authorization": token})
     assert rv.status_code == 401
+
+
+# ── /api/validate ────────────────────────────────────────────────────────────────
+
+def test_api_validate_requires_jwt(client):
+    rv = client.post("/api/validate", json={})
+    assert rv.status_code == 401
+
+
+def test_api_validate_with_valid_jwt(client, auth_headers):
+    rv = client.post(
+        "/api/validate",
+        json={"n_records": 2, "synthetic": True},
+        headers=auth_headers,
+    )
+    assert rv.status_code == 200
+    data = rv.get_json()
+    assert data["status"] == "ok"
+    assert data["n_records"] == 2
+    assert "stats" in data
+    assert "methods_statement" in data
+    stats = data["stats"]
+    for key in ("drift_latency", "pause_latency", "false_alarms", "rms_latency", "fft_latency"):
+        assert key in stats
+        assert "mean" in stats[key]
+        assert "std" in stats[key]
+
+
+def test_api_validate_methods_statement(client, auth_headers):
+    rv = client.post(
+        "/api/validate",
+        json={"n_records": 2, "synthetic": True},
+        headers=auth_headers,
+    )
+    assert rv.status_code == 200
+    ms = rv.get_json()["methods_statement"]
+    assert "N = 2" in ms
+    assert "Section 5" in ms
+
+
+# ── /api/results/metrics.csv ─────────────────────────────────────────────────────
+
+def test_api_results_metrics_csv_requires_jwt(client):
+    rv = client.get("/api/results/metrics.csv")
+    assert rv.status_code == 401
+
+
+def test_api_results_metrics_csv_after_validate(client, auth_headers):
+    # Run validation first to create the CSV
+    client.post(
+        "/api/validate",
+        json={"n_records": 2, "synthetic": True},
+        headers=auth_headers,
+    )
+    rv = client.get("/api/results/metrics.csv", headers=auth_headers)
+    assert rv.status_code == 200
+    assert "text/csv" in rv.content_type
+
+
+# ── /api/results/summary.csv ─────────────────────────────────────────────────────
+
+def test_api_results_summary_csv_requires_jwt(client):
+    rv = client.get("/api/results/summary.csv")
+    assert rv.status_code == 401
+
+
+def test_api_results_summary_csv_after_validate(client, auth_headers):
+    client.post(
+        "/api/validate",
+        json={"n_records": 2, "synthetic": True},
+        headers=auth_headers,
+    )
+    rv = client.get("/api/results/summary.csv", headers=auth_headers)
+    assert rv.status_code == 200
+    assert "text/csv" in rv.content_type
+
+
+# ── /api/results/pdf ─────────────────────────────────────────────────────────────
+
+def test_api_results_pdf_requires_jwt(client):
+    rv = client.get("/api/results/pdf")
+    assert rv.status_code == 401
+
+
+def test_api_results_pdf_after_validate(client, auth_headers):
+    client.post(
+        "/api/validate",
+        json={"n_records": 2, "synthetic": True},
+        headers=auth_headers,
+    )
+    rv = client.get("/api/results/pdf", headers=auth_headers)
+    assert rv.status_code == 200
+    assert rv.content_type == "application/pdf"
+
+
+# ── /api/results/docx ────────────────────────────────────────────────────────────
+
+def test_api_results_docx_requires_jwt(client):
+    rv = client.get("/api/results/docx")
+    assert rv.status_code == 401
+
+
+def test_api_results_docx_after_validate(client, auth_headers):
+    client.post(
+        "/api/validate",
+        json={"n_records": 2, "synthetic": True},
+        headers=auth_headers,
+    )
+    rv = client.get("/api/results/docx", headers=auth_headers)
+    assert rv.status_code == 200
+    assert "wordprocessingml" in rv.content_type
+
+
+# ── /api/send-results ────────────────────────────────────────────────────────────
+
+def test_api_send_results_requires_jwt(client):
+    rv = client.post("/api/send-results", json={"email": "test@example.com"})
+    assert rv.status_code == 401
+
+
+def test_api_send_results_missing_email(client, auth_headers):
+    rv = client.post("/api/send-results", json={}, headers=auth_headers)
+    assert rv.status_code == 400
+    assert "error" in rv.get_json()
+
+
+def test_api_send_results_invalid_email(client, auth_headers):
+    rv = client.post("/api/send-results", json={"email": "notvalid"}, headers=auth_headers)
+    assert rv.status_code == 400
