@@ -6,7 +6,7 @@
 |---|---|
 | **Authors** | Marcel Krüger¹·*, Don Michael Feeney Jr.² |
 | **Affiliations** | ¹ Independent Researcher, Germany · ² Independent Researcher, USA |
-| **Correspondence** | marcelkrueger092@gmail.com |
+| **Correspondence** | marcelkrueger092@gmail.com , dfeen87@gmail.com|
 | **ORCID (M.K.)** | 0009-0002-5709-9729 |
 | **ORCID (D.M.F.)** | 0009-0003-1350-4160 |
 | **DOI** | *(assigned by journal)* |
